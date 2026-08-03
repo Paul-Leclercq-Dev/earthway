@@ -1,0 +1,346 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  Int       @id @default(autoincrement())
+  firstName           String
+  lastName            String
+  password            String?   // Nullable for OAuth users
+  email               String    @unique
+  emailVerified       Boolean   @default(false)
+  oauthProvider       String?   // "google", "local", null
+  oauthId             String?   // Google user ID
+  photoUrl            String?
+  refreshToken        String?
+  subscriptionId      Int?      @unique
+  subscriptionStart   DateTime?
+  subscriptionEnd     DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  emailNotifications  Boolean   @default(true)
+  pushNotifications   Boolean   @default(true)
+  xp                  Int       @default(0)
+  level               Int       @default(1)
+  donations           Donation[]
+  supports            Support[]
+  subscription        Subscription? @relation(fields: [subscriptionId], references: [id])
+  impact              Impact?
+  emailPreferences    EmailPreference?
+
+  @@map("user")
+}
+
+model Subscription {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  price                 Decimal
+  duration              Int       // Duration in days
+  stripeCustomerId      String?   // Stripe customer ID
+  stripeSubscriptionId  String?   @unique // Stripe subscription ID
+  tier                  SubscriptionTier? // basic, premium, vip
+  status                SubscriptionStatus @default(active) // active, canceled, past_due
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  canceledAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  users                 User[]
+  supports              Support[] // Relation with Support
+
+  @@index([stripeSubscriptionId])
+  @@map("subscription")
+}
+
+enum SubscriptionTier {
+  basic
+  premium
+  vip
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+  incomplete
+}
+
+model Support {
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  ongId          Int
+  type           SupportType
+  amount         Decimal        @default(0)
+  startDate      DateTime
+  endDate        DateTime?
+  subscriptionId Int?           // Foreign key to Subscription
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+  ong            ONG            @relation(fields: [ongId], references: [id])
+
+  @@map("support")
+}
+
+model Donation {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  ongId                 Int
+  amount                Decimal
+  stripePaymentIntentId String?  @unique // Stripe Payment Intent ID
+  cause                 DonationCause @default(general) // trees, corals, pollinators, general
+  status                DonationStatus @default(pending) // succeeded, pending, failed
+  date                  DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
+  ong                   ONG      @relation(fields: [ongId], references: [id])
+
+  @@index([stripePaymentIntentId])
+  @@index([userId])
+  @@map("donation")
+}
+
+enum DonationCause {
+  trees
+  corals
+  pollinators
+  general
+}
+
+enum DonationStatus {
+  succeeded
+  pending
+  failed
+}
+
+model ONG {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String
+  website     String
+  categoryId  Int
+  category    Category  @relation(fields: [categoryId], references: [id])
+  supports    Support[]
+  donations   Donation[]
+
+  @@map("ong")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  image       String?
+  articles    Article[]
+  media       Media[]
+  ongs        ONG[]
+
+  @@map("category")
+}
+
+model Article {
+  id             Int       @id @default(autoincrement())
+  title          String
+  content        String
+  author         String
+  publicationDate DateTime @default(now())
+  link           String?
+  categoryId     Int
+  category       Category  @relation(fields: [categoryId], references: [id])
+
+  @@map("article")
+}
+
+model Media {
+  id          Int      @id @default(autoincrement())
+  type        MediaType
+  url         String
+  description String?
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  @@map("media")
+}
+
+model Marketplace {
+  id   Int    @id @default(autoincrement())
+  name String
+  url  String
+
+  articles ArticleMarket[]
+
+  @@map("marketplace")
+}
+
+model ArticleMarket {
+  id             Int         @id @default(autoincrement())
+  title          String
+  content        String
+  image          String?
+  video          String?
+  price          Decimal
+  trackedLink    String
+  marketplaceId  Int
+  marketplace    Marketplace @relation(fields: [marketplaceId], references: [id])
+
+  @@map("article_market")
+}
+
+enum SupportType {
+  DONATION
+  SUBSCRIPTION
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+// ===== NEW MODELS FOR EARTHWAY GLOBAL PRODUCT =====
+
+model NewsArticle {
+  id              Int      @id @default(autoincrement())
+  title           String
+  summary         String
+  content         String
+  author          String?
+  source          String   // "The Guardian", "BBC", etc.
+  sourceUrl       String   @unique
+  imageUrl        String?
+  publishedAt     DateTime
+  theme           NewsTheme // reforestation, oceans, pollinators, innovations, general
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([theme])
+  @@index([publishedAt])
+  @@map("news_article")
+}
+
+enum NewsTheme {
+  reforestation
+  oceans
+  pollinators
+  innovations
+  general
+}
+
+model Impact {
+  id                      Int      @id @default(autoincrement())
+  userId                  Int      @unique
+  treesFinanced           Int      @default(0)
+  coralsRestored          Int      @default(0)
+  pollinatorsProtected    Int      @default(0)
+  totalContributionEur    Float    @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("impact")
+}
+
+model EmailPreference {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  newsletter    Boolean  @default(true)
+  impact        Boolean  @default(true)
+  confirmations Boolean  @default(true)
+  marketing     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_preference")
+}
+
+model WebhookLog {
+  id             Int      @id @default(autoincrement())
+  eventType      String   // "customer.subscription.created", etc.
+  stripeEventId  String   @unique
+  status         WebhookStatus @default(pending) // pending, processed, failed
+  payload        String   // JSON payload
+  errorMessage   String?
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([stripeEventId])
+  @@index([status])
+  @@map("webhook_log")
+}
+
+enum WebhookStatus {
+  pending
+  processed
+  failed
+}
+
+model Product {
+  id            Int          @id @default(autoincrement())
+  name          String
+  description   String
+  price         Float
+  currency      String       @default("EUR")
+  imageUrl      String
+  affiliateUrl  String       // Tracked affiliate link
+  theme         ProductTheme
+  brandName     String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  affiliateLink AffiliateLink?
+
+  @@index([theme])
+  @@map("product")
+}
+
+enum ProductTheme {
+  reforestation
+  oceans
+  zero_waste
+  renewable_energy
+}
+
+// Phase 16 : Affiliation & Deep Linking
+model AffiliateLink {
+  id             Int      @id @default(autoincrement())
+  slug           String   @unique
+  productId      Int?     @unique
+  product        Product? @relation(fields: [productId], references: [id])
+  network        AffiliateNetwork
+  baseUrl        String
+  trackingParams String   // JSON string: {"tag":"earthway-21","ref":"..."}
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  clicks         AffiliateClickLog[]
+
+  @@map("affiliate_link")
+}
+
+enum AffiliateNetwork {
+  shareasale
+  awin
+  affilizz
+  amazon
+  direct
+}
+
+model AffiliateClickLog {
+  id              Int           @id @default(autoincrement())
+  affiliateLinkId Int
+  affiliateLink   AffiliateLink @relation(fields: [affiliateLinkId], references: [id])
+  userId          Int?
+  ipHash          String?       // SHA256 hash of IP for RGPD compliance
+  referrer        String?
+  userAgent       String?
+  createdAt       DateTime      @default(now())
+
+  @@index([affiliateLinkId])
+  @@index([createdAt])
+  @@map("affiliate_click_log")
+}

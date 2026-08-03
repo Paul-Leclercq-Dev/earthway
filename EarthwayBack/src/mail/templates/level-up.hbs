@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nouveau niveau atteint !</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  
+  <!-- Main Container -->
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        
+        <!-- Content Card -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header with gradient -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700;">
+                🎉 Félicitations !
+              </h1>
+            </td>
+          </tr>
+          
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              
+              <!-- Level Up Badge -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 30px;">
+                <tr>
+                  <td style="text-align: center;">
+                    <div style="display: inline-block; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); border-radius: 50%; width: 120px; height: 120px; line-height: 120px; font-size: 48px; font-weight: 700; color: #ffffff; box-shadow: 0 8px 16px rgba(251, 191, 36, 0.3);">
+                      {{level}}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Main Message -->
+              <h2 style="margin: 0 0 16px; color: #1f2937; font-size: 24px; font-weight: 600; text-align: center;">
+                Vous êtes maintenant <strong style="color: #10b981;">{{levelTitle}}</strong> !
+              </h2>
+              
+              <p style="margin: 0 0 24px; color: #6b7280; font-size: 16px; line-height: 1.6; text-align: center;">
+                Bonjour <strong>{{firstName}}</strong>, vous venez de passer au niveau <strong>{{level}}</strong> grâce à votre engagement pour l'environnement.
+              </p>
+              
+              <!-- Stats Box -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f9fafb; border-radius: 12px; margin-bottom: 30px;">
+                <tr>
+                  <td style="padding: 24px;">
+                    <h3 style="margin: 0 0 16px; color: #1f2937; font-size: 18px; font-weight: 600;">
+                      Votre impact jusqu'à présent :
+                    </h3>
+                    
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                      <tr>
+                        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">
+                          🌳 <strong style="color: #10b981;">{{treesPlanted}}</strong> arbres financés
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">
+                          🪸 <strong style="color: #3b82f6;">{{coralsRestored}}</strong> coraux restaurés
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">
+                          🐝 <strong style="color: #f59e0b;">{{pollinatorsHelped}}</strong> pollinisateurs protégés
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">
+                          💚 <strong style="color: #10b981;">{{totalDonated}} EUR</strong> contribués
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Next Level Preview -->
+              {{#if nextLevel}}
+              <div style="background-color: #fef3c7; border-left: 4px solid #fbbf24; padding: 16px; border-radius: 8px; margin-bottom: 30px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                  <strong>Prochain niveau :</strong> Niveau {{nextLevel}} ({{levelTitle}}) - Encore {{xpToNext}} XP nécessaires !
+                </p>
+              </div>
+              {{/if}}
+              
+              <!-- CTA Button -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="text-align: center; padding-top: 10px;">
+                    <a href="{{profileUrl}}" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);">
+                      Voir mon profil
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Encouragement -->
+              <p style="margin: 30px 0 0; color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                Continuez comme ça ! Chaque action compte pour protéger notre planète. 🌍
+              </p>
+              
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; border-radius: 0 0 16px 16px; padding: 24px 30px; text-align: center;">
+              <p style="margin: 0 0 12px; color: #9ca3af; font-size: 12px;">
+                Vous recevez cet email car vous êtes membre d'Earthway
+              </p>
+              <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                <a href="{{unsubscribeUrl}}" style="color: #9ca3af; text-decoration: underline;">Se désabonner</a> |
+                <a href="{{websiteUrl}}" style="color: #9ca3af; text-decoration: underline;">earthway.eco</a>
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+        
+      </td>
+    </tr>
+  </table>
+  
+</body>
+</html>

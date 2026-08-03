@@ -1,0 +1,68 @@
+services:
+  frontend_earthway:
+    build:
+      context: ./EarthwayFront
+    container_name: frontend_earthway
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend_earthway
+    networks:
+      - app_network
+
+  backend_earthway:
+    build:
+      context: ./EarthwayBack
+    container_name: backend_earthway
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - REFRESH_SECRET_KEY=${REFRESH_SECRET_KEY}
+      - MAIL_HOST=${MAIL_HOST}
+      - MAIL_USER=${MAIL_USER}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_FROM=${MAIL_FROM}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+    depends_on:
+      - bdd_earthway
+      - redis_earthway
+    networks:
+      - app_network
+
+  bdd_earthway:
+    container_name: bdd_earthway_sql
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: earthway
+      MYSQL_DATABASE: earthwaybdd1
+    ports:
+      - "3309:3306"
+    networks:
+      - app_network
+
+  phpmyadminprod_earthway:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadminprod_earthway
+    environment:
+      PMA_HOST: bdd_earthway
+      MYSQL_ROOT_PASSWORD: earthway_passeword_to_change
+    ports:
+      - "8080:80"
+    depends_on:
+      - bdd_earthway
+    networks:
+      - app_network
+
+  redis_earthway:
+    image: redis:latest
+    container_name: redis_earthway
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+networks:
+  app_network:

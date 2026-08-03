@@ -1,0 +1,73 @@
+services:
+  frontend:
+    build:
+      context: ./EarthwayFront
+    container_name: frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+  backend:
+    build:
+      context: ./EarthwayBack
+    container_name: backend
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - REFRESH_SECRET_KEY=${REFRESH_SECRET_KEY}
+      - MAIL_HOST=${MAIL_HOST}
+      - MAIL_USER=${MAIL_USER}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_FROM=${MAIL_FROM}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+    depends_on:
+      - bddcasa
+      - redis
+    networks:
+      - app_network
+
+  bddcasa:
+    container_name: bddcasafront
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: casaaltea
+      MYSQL_DATABASE: lacasa2
+    ports:
+      - "3309:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app_network
+
+  phpmyadminprod:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadminprod
+    environment:
+      PMA_HOST: bddcasa
+      MYSQL_ROOT_PASSWORD: casaaltea
+    ports:
+      - "8080:80"
+    depends_on:
+      - bddcasa
+    networks:
+      - app_network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+volumes:
+  db_data:
+
+networks:
+  app_network:

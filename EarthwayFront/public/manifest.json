@@ -1,0 +1,61 @@
+{
+  "name": "Earthway - Agir pour la Planète",
+  "short_name": "Earthway",
+  "description": "Plateforme de sensibilisation et d'action environnementale. Soutenez la reforestation, la protection des océans, des pollinisateurs et des innovations écologiques.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["education", "lifestyle", "social"],
+  "icons": [
+    {
+      "src": "/icons/pwa-64x64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Actualités",
+      "short_name": "News",
+      "description": "Consulter les dernières actualités environnementales",
+      "url": "/news",
+      "icons": []
+    },
+    {
+      "name": "Abonnements",
+      "short_name": "Abos",
+      "description": "Gérer mes abonnements mensuels",
+      "url": "/subscriptions",
+      "icons": []
+    },
+    {
+      "name": "Faire un don",
+      "short_name": "Don",
+      "description": "Faire un don ponctuel pour la planète",
+      "url": "/donations",
+      "icons": []
+    }
+  ]
+}
