@@ -21,7 +21,7 @@ const Login: React.FC = () => {
       navigate('/profile');
     } catch (err: any) {
       const message =
-        err?.response?.data?.message || 'Email ou mot de passe incorrect.';
+        err?.response?.data?.message || err?.message || 'Email ou mot de passe incorrect.';
       setError(message);
     } finally {
       setLoading(false);

@@ -138,8 +138,17 @@ export class AuthService {
 
   // ─── Token Refresh ─────────────────────────────────────────────────────────
 
-  async refreshTokens(userId: number, refreshToken: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  async refreshTokens(refreshToken: string) {
+    const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'dev_jwt_refresh_secret';
+
+    let payload: { sub: number; email: string };
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, { secret: refreshSecret });
+    } catch {
+      throw new UnauthorizedException('Refresh token invalide.');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
 
     if (!user || !user.refreshToken) {
       throw new UnauthorizedException('Accès refusé.');

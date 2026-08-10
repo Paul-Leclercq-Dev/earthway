@@ -4,11 +4,6 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl || !databaseUrl.startsWith('file:')) {
-  process.env.DATABASE_URL = 'file:./dev.db';
-}
-
 function isIgnorableRedisError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { code?: string; message?: string; port?: number };

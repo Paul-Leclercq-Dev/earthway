@@ -7,12 +7,21 @@ async function main() {
   console.log('🌱 Seeding database...');
 
   // Clear existing data (optional, for dev)
+  await prisma.affiliateClickLog.deleteMany();
+  await prisma.affiliateLink.deleteMany();
+  await prisma.impact.deleteMany();
+  await prisma.emailPreference.deleteMany();
+  await prisma.webhookLog.deleteMany();
+  await prisma.support.deleteMany();
   await prisma.newsArticle.deleteMany();
   await prisma.donation.deleteMany();
-  await prisma.subscription.deleteMany();
-  await prisma.user.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.article.deleteMany();
+  await prisma.media.deleteMany();
   await prisma.articleMarket.deleteMany();
   await prisma.marketplace.deleteMany();
+  await prisma.subscription.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.oNG.deleteMany();
   await prisma.category.deleteMany();
 
@@ -360,9 +369,6 @@ async function main() {
   console.log('✅ Products created');
 
   // 10. Create AffiliateLinks for products (Phase 16: Deep Linking)
-  await prisma.affiliateClickLog.deleteMany();
-  await prisma.affiliateLink.deleteMany();
-
   await Promise.all([
     prisma.affiliateLink.create({
       data: {

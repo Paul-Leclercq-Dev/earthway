@@ -65,10 +65,8 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  refresh(@Req() req: Request, @Body() dto: RefreshTokenDto) {
-    const user = req.user as { userId: number; email: string };
-    return this.authService.refreshTokens(user.userId, dto.refreshToken);
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshTokens(dto.refreshToken);
   }
 
   // ─── Logout ────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -34,15 +34,28 @@ export class DonationsService {
       ongId = firstOng?.id ?? 1;
     }
 
-    const paymentIntent = await this.stripeProvider.paymentIntents.create({
-      amount: dto.amount,
-      currency: 'eur',
-      metadata: {
-        cause: dto.cause,
-        userId: userId ? String(userId) : 'anonymous',
-      },
-      automatic_payment_methods: { enabled: true },
-    });
+    const stripeSecretKey = this.config.get<string>('STRIPE_SECRET_KEY') || '';
+    if (!stripeSecretKey || stripeSecretKey.includes('placeholder')) {
+      throw new ServiceUnavailableException(
+        'Stripe is not configured. Set STRIPE_SECRET_KEY in backend environment variables.',
+      );
+    }
+
+    let paymentIntent;
+    try {
+      paymentIntent = await this.stripeProvider.paymentIntents.create({
+        amount: dto.amount,
+        currency: 'eur',
+        metadata: {
+          cause: dto.cause,
+          userId: userId ? String(userId) : 'anonymous',
+        },
+        automatic_payment_methods: { enabled: true },
+      });
+    } catch (error) {
+      this.logger.error(`Stripe PaymentIntent creation failed: ${(error as Error).message}`);
+      throw new BadGatewayException('Stripe request failed. Check your STRIPE_SECRET_KEY and Stripe account settings.');
+    }
 
     const donation = await this.prisma.donation.create({
       data: {

@@ -9,12 +9,13 @@ import { NewsTheme } from '@prisma/client';
 import type Redis from 'ioredis';
 import { REDIS_CLIENT } from './news.constants';
 
-const NEWS_CACHE_TTL = 86400; // 24h
+const DEFAULT_NEWS_CACHE_TTL = 86400; // 24h
 
 @Injectable()
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
   private readonly parser: any;
+  private readonly cacheTtl: number;
 
   constructor(
     private prisma: PrismaService,
@@ -22,6 +23,11 @@ export class NewsService {
     @InjectQueue('news') private newsQueue: Queue,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {
+    const configuredTtl = Number(this.config.get<string>('NEWS_CACHE_TTL') || DEFAULT_NEWS_CACHE_TTL);
+    this.cacheTtl = Number.isFinite(configuredTtl) && configuredTtl > 0
+      ? configuredTtl
+      : DEFAULT_NEWS_CACHE_TTL;
+
     this.parser = new Parser({
       customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
@@ -39,17 +45,23 @@ export class NewsService {
     limit?: number;
   }) {
     const { theme, search, page = 1, limit = 20 } = filters;
+    const normalizedSearch = search?.trim();
+    const isSearchQuery = Boolean(normalizedSearch);
+
     // Convertir en nombres (les query params arrivent en string)
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const cacheKey = `news:all:${theme ?? 'all'}:${search ?? ''}:${pageNum}:${limitNum}`;
+    const cacheKey = `news:all:${theme ?? 'all'}:${normalizedSearch ?? ''}:${pageNum}:${limitNum}`;
 
-    const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      this.logger.debug(`Cache hit: ${cacheKey}`);
-      return JSON.parse(cached);
+    // Search results should be fresh and are not cached to avoid stale UX.
+    if (!isSearchQuery) {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache hit: ${cacheKey}`);
+        return JSON.parse(cached);
+      }
     }
 
     const where: any = {};
@@ -58,11 +70,11 @@ export class NewsService {
       where.theme = theme;
     }
 
-    if (search) {
+    if (normalizedSearch) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { summary: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
+        { title: { contains: normalizedSearch } },
+        { summary: { contains: normalizedSearch } },
+        { content: { contains: normalizedSearch } },
       ];
     }
 
@@ -86,10 +98,31 @@ export class NewsService {
       },
     };
 
-    await this.redis.setex(cacheKey, NEWS_CACHE_TTL, JSON.stringify(result));
-    this.logger.debug(`Cache set: ${cacheKey}`);
+    if (!isSearchQuery) {
+      await this.redis.setex(cacheKey, this.cacheTtl, JSON.stringify(result));
+      this.logger.debug(`Cache set: ${cacheKey}`);
+    }
 
     return result;
+  }
+
+  private async invalidateListCache() {
+    const pattern = 'news:all:*';
+    let cursor = '0';
+    let deleted = 0;
+
+    do {
+      const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        deleted += keys.length;
+        await this.redis.del(...keys);
+      }
+    } while (cursor !== '0');
+
+    if (deleted > 0) {
+      this.logger.debug(`Cache invalidated: ${deleted} keys removed`);
+    }
   }
 
   /**
@@ -165,6 +198,10 @@ export class NewsService {
       }
     }
 
+    if (totalNew > 0) {
+      await this.invalidateListCache();
+    }
+
     this.logger.log(`✅ Parsing RSS terminé. ${totalNew} nouveaux articles ajoutés.`);
     return { success: true, newArticles: totalNew };
   }
@@ -173,7 +210,10 @@ export class NewsService {
    * Déclenche le job RSS manuellement (pour tests)
    */
   async triggerRSSJob() {
-    await this.newsQueue.add('fetch-rss', {}, { priority: 1 });
-    return { message: 'Job RSS ajouté à la queue' };
+    const result = await this.fetchAndStoreRSSArticles();
+    return {
+      message: 'RSS refresh terminé',
+      ...result,
+    };
   }
 }
