@@ -9,14 +9,15 @@
 ## Table des Matières
 
 1. [Redis et Bull](#1-redis-et-bull)
-2. [React Context](#2-react-context)
-3. [Prisma Studio](#3-prisma-studio)
-4. [Strategies (JWT et Google OAuth)](#4-strategies-jwt-et-google-oauth)
-5. [Injectable vs Export](#5-injectable-vs-export)
-6. [Le mot-clé `this`](#6-le-mot-clé-this)
-7. [Modules, Services et Controllers](#7-modules-services-et-controllers)
-8. [Injection de Dépendances](#8-injection-de-dépendances)
-9. [Configuration des Modules (ConfigModule et BullModule)](#9-configuration-des-modules)
+2. [Flux concret des requêtes news](#2-flux-concret-des-requetes-news)
+3. [React Context](#3-react-context)
+4. [Prisma Studio](#4-prisma-studio)
+5. [Strategies (JWT et Google OAuth)](#5-strategies-jwt-et-google-oauth)
+6. [Injectable vs Export](#6-injectable-vs-export)
+7. [Le mot-clé `this`](#7-le-mot-clé-this)
+8. [Modules, Services et Controllers](#8-modules-services-et-controllers)
+9. [Injection de Dépendances](#9-injection-de-dépendances)
+10. [Configuration des Modules (ConfigModule et BullModule)](#10-configuration-des-modules)
 
 ---
 
@@ -99,7 +100,164 @@ BullModule.forRoot({
 
 ---
 
-## 2. React Context
+## 2. Flux concret des requêtes news
+
+### Le but du flux
+
+La feature "actualités" dans Earthway fonctionne en 3 couches différentes :
+
+1. Le frontend React demande des articles à l’API NestJS.
+2. Le backend regarde d’abord dans Redis pour éviter de refaire une requête lente à PostgreSQL.
+3. Si besoin, il interroge Prisma/PostgreSQL pour récupérer les articles stockés.
+4. En parallèle, un worker Bull/Redis récupère des flux RSS en arrière-plan et remplit la base de données.
+
+Autrement dit :
+- PostgreSQL = la vraie source de données
+- Redis = cache et file de jobs
+- Bull = moteur de traitement des jobs asynchrones
+
+### Cas réel : ouvrir la page des actualités
+
+Imagine que l’utilisateur ouvre la page /actualites dans le frontend.
+
+#### Étape 1 — le front envoie une requête HTTP
+Le composant [EarthwayFront/src/pages/News.tsx](EarthwayFront/src/pages/News.tsx) appelle la fonction [EarthwayFront/src/services/newsService.ts](EarthwayFront/src/services/newsService.ts), qui fait un appel à l’API :
+
+```http
+GET /api/news?page=1&limit=12
+```
+
+Le frontend n’a pas à savoir comment fonctionne Redis ou Prisma : il attend juste un JSON de type :
+
+```json
+{
+  "data": [],
+  "meta": {
+    "total": 0,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 0
+  }
+}
+```
+
+#### Étape 2 — le contrôleur NestJS reçoit la requête
+La route est gérée par [EarthwayBack/src/news/news.controller.ts](EarthwayBack/src/news/news.controller.ts).
+
+Le controller ne fait presque rien de plus que déléguer au service :
+
+```ts
+@Get()
+async findAll(@Query() query: NewsQueryDto) {
+  return this.newsService.findAll(query);
+}
+```
+
+#### Étape 3 — le service regarde Redis en premier
+Dans [EarthwayBack/src/news/news.service.ts](EarthwayBack/src/news/news.service.ts), le service construit une clé de cache comme :
+
+```txt
+news:all:all::1:12
+```
+
+Puis il vérifie dans Redis si cette clé existe déjà.
+
+- Si elle existe : il renvoie immédiatement le résultat déjà sérialisé.
+- Si elle n’existe pas : il continue vers PostgreSQL.
+
+C’est là que Redis sert de cache de lecture rapide.
+
+#### Étape 4 — si le cache est vide, Prisma lit PostgreSQL
+Si aucune valeur n’est présente dans Redis, le service exécute deux requêtes Prisma :
+
+- `findMany()` pour récupérer les articles
+- `count()` pour connaître le nombre total d’articles
+
+Ces requêtes ciblent le modèle Prisma `NewsArticle`, qui correspond à la table PostgreSQL `news_article`.
+
+#### Étape 5 — le résultat est mis en cache
+Une fois les articles récupérés, le backend les emballe dans un objet :
+
+```ts
+{
+  data: articles,
+  meta: {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  }
+}
+```
+
+Puis il stocke ce résultat dans Redis avec une durée de vie (TTL) de 24h.
+
+C’est pourquoi la page peut se charger très vite la seconde fois : elle ne repasse plus par la base.
+
+### Le rôle de Bull et des jobs RSS
+
+Les articles ne tombent pas “magiquement” dans la base. Ils sont récupérés en arrière-plan par un worker Bull.
+
+Le flux est le suivant :
+
+1. Un cron job est programmé à 6h du matin.
+2. Il crée un job Bull nommé `fetch-rss`.
+3. Le processor [EarthwayBack/src/news/news.processor.ts](EarthwayBack/src/news/news.processor.ts) reçoit ce job.
+4. Le service [EarthwayBack/src/news/news.service.ts](EarthwayBack/src/news/news.service.ts) parse des flux RSS.
+5. Chaque article traité est inséré en base via Prisma.
+6. Après insertion, le cache Redis des listes news est invalidé.
+
+### Pourquoi Redis est utile ici
+
+Redis sert à 2 choses distinctes dans cette feature :
+
+- Cache de lecture : accélérer les appels `/api/news`
+- File de jobs : permettre à Bull de stocker et traiter des tâches asynchrones
+
+Ce n’est pas le même rôle que PostgreSQL.
+
+- PostgreSQL = stockage durable des articles
+- Redis = rapidité et orchestration temporaire
+
+### Pourquoi le backend pouvait planter sur cette route
+
+Le bug que nous avons corrigé venait du fait que le backend tentait d’utiliser la table `news_article` alors que la base n’avait pas encore le schéma Prisma synchronisé.
+
+Dans ce cas :
+- la route `/api/news` arrivait bien jusqu’au service,
+- mais Prisma levait une exception parce que la table n’existait pas,
+- donc NestJS renvoyait une erreur 500.
+
+Autrement dit : la route était “ouverte”, mais la base n’était pas encore prête à la servir.
+
+### En pratique, comment lire ce flux
+
+Quand tu vois une page actualités qui se charge, pense à ça :
+
+- React demande des données
+- NestJS essaie de les servir rapidement grâce à Redis
+- Sinon il interroge PostgreSQL via Prisma
+- Pendant ce temps, un job Bull peut remplir la base avec de nouveaux articles RSS
+
+Si tu veux comprendre une panne, la première question à se poser est toujours :
+
+- est-ce que la requête arrive au backend ?
+- est-ce que Redis répond ?
+- est-ce que Prisma peut lire la base ?
+- est-ce qu’il y a des articles dans `news_article` ?
+
+### Résumé ultra simple
+
+- Frontend → appelle `/api/news`
+- Backend → regarde Redis
+- Si nécessaire → va chercher en base avec Prisma
+- En arrière-plan → Bull récupère des flux RSS et remplit la base
+
+C’est ce qui fait qu’une page d’actualités peut fonctionner même si le backend et la base ne sont pas “au même moment” dans le même flux : l’un sert les données, l’autre les alimente.
+
+---
+
+## 3. React Context
 
 ### Le Problème : Props Drilling
 
