@@ -1473,5 +1473,5 @@ Maintenant que vous maîtrisez ces concepts, vous êtes prêt pour :
 
 ---
 
-**Document généré le 10 décembre 2025**  
-**Projet Earthway - MVP en développement** dd. zzzz
+**Document généré le 10 décembre 2025**   zz
+**Projet Earthway - MVP en développement** dd. zzzz 

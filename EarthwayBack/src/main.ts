@@ -32,6 +32,7 @@ process.on('uncaughtException', (error) => {
 });
 
 async function bootstrap() {
+  // rawBody must be enabled so Stripe signature verification can use the exact payload bytes.
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Security: HTTP headers

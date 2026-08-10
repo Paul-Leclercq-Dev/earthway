@@ -139,7 +139,10 @@ export class AuthService {
   // ─── Token Refresh ─────────────────────────────────────────────────────────
 
   async refreshTokens(refreshToken: string) {
-    const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'dev_jwt_refresh_secret';
+    const refreshSecret =
+      this.config.get<string>('REFRESH_SECRET_KEY') ||
+      this.config.get<string>('JWT_REFRESH_SECRET') ||
+      'dev_jwt_refresh_secret';
 
     let payload: { sub: number; email: string };
     try {
@@ -275,8 +278,14 @@ export class AuthService {
 
     const accessExpires = (this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m') as any);
     const refreshExpires = (this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') as any);
-    const accessSecret = this.config.get<string>('JWT_ACCESS_SECRET') || 'dev_jwt_access_secret';
-    const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'dev_jwt_refresh_secret';
+    const accessSecret =
+      this.config.get<string>('SECRET_KEY') ||
+      this.config.get<string>('JWT_ACCESS_SECRET') ||
+      'dev_jwt_access_secret';
+    const refreshSecret =
+      this.config.get<string>('REFRESH_SECRET_KEY') ||
+      this.config.get<string>('JWT_REFRESH_SECRET') ||
+      'dev_jwt_refresh_secret';
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {

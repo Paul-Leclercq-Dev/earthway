@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { donationService } from '../services/donationService';
+import { getStripePromise } from '../services/stripeService';
 
 type Cause = 'trees' | 'corals' | 'pollinators' | 'general';
 
@@ -37,8 +39,103 @@ const CAUSES: { id: Cause; icon: string; label: string; description: string; col
 
 const PRESET_AMOUNTS = [5, 10, 20, 50, 100];
 
+const stripePromise = getStripePromise();
+
+function DonationPaymentForm({
+  donationId,
+  onBack,
+  onError,
+  onSuccess,
+}: {
+  donationId: number;
+  onBack: () => void;
+  onError: (message: string) => void;
+  onSuccess: (message: string) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+
+  const handleConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) {
+      onError('Stripe est en cours de chargement. Réessayez dans un instant.');
+      return;
+    }
+
+    setProcessing(true);
+    onError('');
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/donations?donationId=${donationId}`,
+      },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      onError(error.message || 'Le paiement n’a pas pu être confirmé.');
+      setProcessing(false);
+      return;
+    }
+
+    switch (paymentIntent?.status) {
+      case 'succeeded':
+        onSuccess('Votre don a été confirmé avec succès.');
+        break;
+      case 'processing':
+        onSuccess('Votre paiement est en cours de traitement.');
+        break;
+      case 'requires_payment_method':
+        onError('Le paiement a été refusé. Veuillez vérifier votre moyen de paiement.');
+        break;
+      case 'requires_action':
+        onError('Une authentification supplémentaire est requise pour finaliser le paiement.');
+        break;
+      default:
+        onSuccess('Paiement confirmé.');
+        break;
+    }
+
+    setProcessing(false);
+  };
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Finaliser le paiement</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Stripe gère automatiquement l'authentification forte 3D Secure si votre banque la demande.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-sm text-gray-500 hover:text-gray-700"
+        >
+          Modifier le don
+        </button>
+      </div>
+
+      <form onSubmit={handleConfirm} className="space-y-4">
+        <PaymentElement options={{ layout: 'tabs' }} />
+        <button
+          type="submit"
+          disabled={!stripe || !elements || processing}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-3 rounded-lg transition-colors"
+        >
+          {processing ? 'Authentification en cours...' : 'Payer maintenant'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 const Donations: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedCause, setSelectedCause] = useState<Cause>('general');
   const [amountEur, setAmountEur] = useState<number>(10);
@@ -47,8 +144,54 @@ const Donations: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(
+    'Votre paiement est en cours de traitement. Vous recevrez une confirmation par email.',
+  );
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [pendingDonationId, setPendingDonationId] = useState<number | null>(null);
 
   const effectiveAmount = isCustom ? parseFloat(customAmount) || 0 : amountEur;
+
+  useEffect(() => {
+    const clientSecretFromRedirect = searchParams.get('payment_intent_client_secret');
+    if (!clientSecretFromRedirect || !stripePromise) {
+      return;
+    }
+
+    let ignore = false;
+
+    const syncPaymentStatus = async () => {
+      const stripe = await stripePromise;
+      if (!stripe || ignore) return;
+
+      const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecretFromRedirect);
+      if (!paymentIntent || ignore) return;
+
+      if (paymentIntent.status === 'succeeded') {
+        setSuccessMessage('Votre don a été confirmé avec succès.');
+        setSuccess(true);
+        setClientSecret(null);
+      } else if (paymentIntent.status === 'processing') {
+        setSuccessMessage('Votre paiement est en cours de traitement.');
+        setSuccess(true);
+        setClientSecret(null);
+      } else if (paymentIntent.status === 'requires_payment_method') {
+        setError('Le paiement a échoué. Veuillez essayer un autre moyen de paiement.');
+      }
+
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('payment_intent');
+      nextParams.delete('payment_intent_client_secret');
+      nextParams.delete('redirect_status');
+      setSearchParams(nextParams, { replace: true });
+    };
+
+    void syncPaymentStatus();
+
+    return () => {
+      ignore = true;
+    };
+  }, [searchParams, setSearchParams]);
 
   const handlePresetClick = (val: number) => {
     setIsCustom(false);
@@ -67,19 +210,19 @@ const Donations: React.FC = () => {
     setLoading(true);
 
     try {
+      if (!stripePromise) {
+        throw new Error('Stripe n’est pas configuré côté frontend. Définissez VITE_STRIPE_PUBLISHABLE_KEY.');
+      }
+
       const { data } = await donationService.createDonation({
         amount: Math.round(effectiveAmount * 100),
         cause: selectedCause,
       });
 
-      // Store client secret to confirm payment with Stripe Elements
-      // For now we show a success message and redirect
-      // In production, integrate @stripe/react-stripe-js here
-      // const clientSecret = data.clientSecret; // Will be used later
-      console.log('Payment Intent created:', data.clientSecret);
-      setSuccess(true);
+      setClientSecret(data.clientSecret);
+      setPendingDonationId(data.donationId);
     } catch (err: any) {
-      const message = err?.response?.data?.message || 'Une erreur est survenue. Veuillez réessayer.';
+      const message = err?.response?.data?.message || err?.message || 'Une erreur est survenue. Veuillez réessayer.';
       setError(Array.isArray(message) ? message.join(', ') : message);
     } finally {
       setLoading(false);
@@ -93,7 +236,7 @@ const Donations: React.FC = () => {
           <span className="text-5xl">💚</span>
           <h2 className="text-2xl font-bold text-gray-900 mt-4 mb-2">Merci pour votre don !</h2>
           <p className="text-gray-600 mb-6">
-            Votre paiement est en cours de traitement. Vous recevrez une confirmation par email.
+            {successMessage}
           </p>
           <div className="flex gap-3 justify-center">
             <button
@@ -219,16 +362,46 @@ const Donations: React.FC = () => {
             </div>
           )}
 
+          {clientSecret && stripePromise && pendingDonationId && (
+            <Elements
+              stripe={stripePromise}
+              options={{
+                clientSecret,
+                appearance: {
+                  theme: 'stripe',
+                  variables: {
+                    colorPrimary: '#059669',
+                    borderRadius: '12px',
+                  },
+                },
+              }}
+            >
+              <DonationPaymentForm
+                donationId={pendingDonationId}
+                onBack={() => {
+                  setClientSecret(null);
+                  setPendingDonationId(null);
+                  setError(null);
+                }}
+                onError={(message) => setError(message || null)}
+                onSuccess={(message) => {
+                  setSuccessMessage(message);
+                  setSuccess(true);
+                }}
+              />
+            </Elements>
+          )}
+
           <button
             type="submit"
-            disabled={loading || effectiveAmount < 1}
+            disabled={loading || effectiveAmount < 1 || !!clientSecret}
             className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-4 rounded-lg transition-colors text-lg"
           >
-            {loading ? 'Traitement...' : `Donner ${effectiveAmount > 0 ? effectiveAmount + ' €' : ''}`}
+            {loading ? 'Création du paiement...' : clientSecret ? 'Paiement prêt à être confirmé' : `Donner ${effectiveAmount > 0 ? effectiveAmount + ' €' : ''}`}
           </button>
 
           <p className="text-center text-xs text-gray-400">
-            🔒 Paiement sécurisé via Stripe · Aucune donnée bancaire stockée
+            🔒 Paiement sécurisé via Stripe · SCA/3D Secure pris en charge automatiquement
           </p>
         </form>
       </div>

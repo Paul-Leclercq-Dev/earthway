@@ -4,6 +4,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { Prisma } from '@prisma/client';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeProvider } from '../config/stripe.provider';
@@ -19,16 +22,22 @@ export class WebhooksService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly stripeProvider: StripeProvider,
+    @InjectQueue('webhooks') private readonly webhooksQueue: Queue,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly donationsService: DonationsService,
     private readonly impactService: ImpactService,
   ) {}
 
-  constructEvent(rawBody: Buffer, signature: string): Stripe.Event {
+  constructEvent(rawBody: Buffer, signature?: string): Stripe.Event {
+    if (!signature) {
+      throw new BadRequestException('Missing Stripe signature header');
+    }
+
     const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     if (!webhookSecret) {
       throw new BadRequestException('Webhook secret not configured');
     }
+
     try {
       return this.stripeProvider.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch {
@@ -36,51 +45,93 @@ export class WebhooksService {
     }
   }
 
-  async handleEvent(event: Stripe.Event): Promise<void> {
-    // Idempotency: skip already processed events
+  async queueEvent(event: Stripe.Event): Promise<{ duplicate: boolean }> {
     const existing = await this.prisma.webhookLog.findUnique({
-      where: { stripeEventId: event.id },
+      where: { eventId: event.id },
     });
-    if (existing?.status === 'processed') {
-      this.logger.log(`Skipping already processed event ${event.id}`);
+
+    if (existing) {
+      this.logger.log(`Webhook duplicate ignored eventId=${event.id} type=${event.type} status=${existing.status}`);
+      return { duplicate: true };
+    }
+
+    try {
+      await this.prisma.webhookLog.create({
+        data: {
+          eventId: event.id,
+          type: event.type,
+          status: 'pending',
+          payload: JSON.stringify(event),
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        this.logger.log(`Webhook duplicate ignored eventId=${event.id} type=${event.type}`);
+        return { duplicate: true };
+      }
+      throw error;
+    }
+
+    await this.webhooksQueue.add(
+      'process-stripe-event',
+      { eventId: event.id },
+    );
+
+    this.logger.log(`Webhook queued eventId=${event.id} type=${event.type}`);
+    return { duplicate: false };
+  }
+
+  async processQueuedEvent(eventId: string): Promise<void> {
+    const log = await this.prisma.webhookLog.findUnique({ where: { eventId } });
+    if (!log) {
+      this.logger.warn(`Webhook log not found for eventId=${eventId}`);
       return;
     }
 
-    // Persist log entry (pending)
-    await this.prisma.webhookLog.upsert({
-      where: { stripeEventId: event.id },
-      create: {
-        stripeEventId: event.id,
-        eventType: event.type,
-        status: 'pending',
-        payload: JSON.stringify(event),
-      },
-      update: {
-        status: 'pending',
-      },
-    });
+    if (log.status === 'processed') {
+      this.logger.log(`Webhook already processed eventId=${eventId}`);
+      return;
+    }
+
+    let event: Stripe.Event;
+    try {
+      event = JSON.parse(log.payload) as Stripe.Event;
+    } catch (error) {
+      this.logger.error(
+        `Webhook payload parse failed eventId=${eventId} error=${(error as Error).message}`,
+      );
+      await this.markWebhookFailed(eventId);
+      return;
+    }
+
+    this.logger.log(`Webhook processing start eventId=${event.id} type=${event.type}`);
 
     try {
       await this.dispatch(event);
 
-      // Mark as processed
       await this.prisma.webhookLog.update({
-        where: { stripeEventId: event.id },
-        data: { status: 'processed', processedAt: new Date() },
+        where: { eventId: event.id },
+        data: { status: 'processed' },
       });
+
+      this.logger.log(`Webhook processing done eventId=${event.id} type=${event.type}`);
     } catch (err) {
-      this.logger.error(`Failed to process event ${event.id}: ${(err as Error).message}`);
-      await this.prisma.webhookLog.update({
-        where: { stripeEventId: event.id },
-        data: { status: 'failed', errorMessage: (err as Error).message },
-      });
+      this.logger.error(
+        `Webhook processing failed eventId=${event.id} type=${event.type} error=${(err as Error).message}`,
+      );
       throw err;
     }
   }
 
+  async markWebhookFailed(eventId: string): Promise<void> {
+    await this.prisma.webhookLog.update({
+      where: { eventId },
+      data: { status: 'failed' },
+    });
+  }
+
   private async dispatch(event: Stripe.Event): Promise<void> {
     switch (event.type) {
-      // ── Subscription events ──────────────────────────────────────────────
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
@@ -112,26 +163,48 @@ export class WebhooksService {
         break;
       }
 
-      // ── Payment events ───────────────────────────────────────────────────
-      case 'payment_intent.succeeded': {
-        const pi = event.data.object as Stripe.PaymentIntent;
-        const donation = await this.prisma.donation.findUnique({
-          where: { stripePaymentIntentId: pi.id },
+      case 'invoice.payment_succeeded':
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const invoiceAny = invoice as any;
+        const subscriptionId =
+          typeof invoiceAny.subscription === 'string'
+            ? invoiceAny.subscription
+            : invoiceAny.subscription?.id;
+
+        if (!subscriptionId) {
+          this.logger.warn(`Invoice event without subscription eventId=${event.id} type=${event.type}`);
+          break;
+        }
+
+        const sub = await this.stripeProvider.subscriptions.retrieve(subscriptionId);
+        const tier = (sub.metadata?.tier as string) ?? 'basic';
+        const customerId = sub.customer as string;
+        const mappedStatus = event.type === 'invoice.payment_failed' ? 'past_due' : sub.status;
+
+        await this.subscriptionsService.syncSubscriptionFromStripe(
+          sub.id,
+          customerId,
+          mappedStatus,
+          tier,
+          new Date(((sub as any).current_period_start as number) * 1000),
+          new Date(((sub as any).current_period_end as number) * 1000),
+          sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+        );
+
+        const user = await this.prisma.user.findFirst({
+          where: {
+            subscription: {
+              stripeSubscriptionId: sub.id,
+            },
+          },
         });
-        if (donation) {
-          await this.donationsService.syncDonationFromStripe(pi.id, 'succeeded');
-          await this.impactService.recalculateImpact(donation.userId);
+        if (user) {
+          await this.impactService.recalculateImpact(user.id);
         }
         break;
       }
 
-      case 'payment_intent.payment_failed': {
-        const pi = event.data.object as Stripe.PaymentIntent;
-        await this.donationsService.syncDonationFromStripe(pi.id, 'failed');
-        break;
-      }
-
-      // ── Checkout session completed ────────────────────────────────────────
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.mode === 'payment' && session.payment_intent) {
@@ -151,7 +224,7 @@ export class WebhooksService {
       }
 
       default:
-        this.logger.debug(`Unhandled Stripe event type: ${event.type}`);
+        this.logger.log(`Webhook event ignored eventId=${event.id} type=${event.type}`);
     }
   }
 }

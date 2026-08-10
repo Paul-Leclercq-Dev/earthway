@@ -26,7 +26,7 @@ export class WebhooksController {
     }
 
     const event = this.webhooksService.constructEvent(rawBody, signature);
-    await this.webhooksService.handleEvent(event);
+    await this.webhooksService.queueEvent(event);
     return { received: true };
   }
 }

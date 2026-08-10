@@ -259,16 +259,14 @@ model EmailPreference {
 }
 
 model WebhookLog {
-  id             Int      @id @default(autoincrement())
-  eventType      String   // "customer.subscription.created", etc.
-  stripeEventId  String   @unique
-  status         WebhookStatus @default(pending) // pending, processed, failed
-  payload        String   // JSON payload
-  errorMessage   String?
-  processedAt    DateTime?
-  createdAt      DateTime @default(now())
+  id        Int           @id @default(autoincrement())
+  eventId   String        @unique
+  type      String
+  status    WebhookStatus @default(pending)
+  payload   String
+  createdAt DateTime      @default(now())
 
-  @@index([stripeEventId])
+  @@index([eventId])
   @@index([status])
   @@map("webhook_log")
 }

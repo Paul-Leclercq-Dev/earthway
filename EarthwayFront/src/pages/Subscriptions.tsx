@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Hooks/useAuth';
 import { subscriptionService, SubscriptionTier } from '../services/subscriptionService';
 
@@ -33,12 +33,16 @@ const TIER_COLORS: Record<string, { bg: string; border: string; cta: string; bad
 const Subscriptions: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [tiers, setTiers] = useState<SubscriptionTier[]>([]);
   const [currentSub, setCurrentSub] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const checkoutStatus = searchParams.get('checkout');
+  const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
     const load = async () => {
@@ -119,6 +123,22 @@ const Subscriptions: React.FC = () => {
                 {new Date(currentSub.currentPeriodEnd).toLocaleDateString('fr-FR')}
               </p>
             </div>
+          </div>
+        )}
+
+        {checkoutStatus === 'success' && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-8">
+            <p className="font-semibold text-emerald-800">Paiement Checkout confirmé</p>
+            <p className="text-sm text-emerald-700 mt-1">
+              Stripe a géré l'authentification forte si nécessaire. L'abonnement sera reflété ici dès confirmation du paiement par webhook.
+            </p>
+            {sessionId && <p className="text-xs text-emerald-600 mt-2">Session: {sessionId}</p>}
+          </div>
+        )}
+
+        {checkoutStatus === 'cancelled' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-8 text-amber-800">
+            Le paiement a été annulé avant confirmation. Vous pouvez relancer la souscription à tout moment.
           </div>
         )}
 

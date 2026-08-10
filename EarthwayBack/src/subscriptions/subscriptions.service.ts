@@ -115,8 +115,8 @@ export class SubscriptionsService {
       mode: 'subscription',
       customer: stripeCustomerId,
       line_items: [{ price: dto.stripePriceId, quantity: 1 }],
-      success_url: `${this.config.get('FRONTEND_URL')}/subscriptions/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${this.config.get('FRONTEND_URL')}/subscriptions`,
+      success_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=cancelled`,
       metadata: {
         userId: String(userId),
         tier: dto.tier,
