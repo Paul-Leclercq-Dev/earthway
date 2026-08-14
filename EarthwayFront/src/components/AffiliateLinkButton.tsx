@@ -26,7 +26,7 @@ interface Props {
   label?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export default function AffiliateLinkButton({
   slug,

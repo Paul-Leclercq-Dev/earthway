@@ -2,6 +2,8 @@ services:
   frontend:
     build:
       context: ./EarthwayFront
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
     ports:
       - "5173:80"
     depends_on:
@@ -14,6 +16,8 @@ services:
     build:
       context: ./EarthwayBack
     command: sh -c "npx prisma db push && node dist/src/main"
+    # Optional for local debugging and Google OAuth callback testing.
+    # For a stricter reverse-proxy setup, remove this mapping and use only port 80 on frontend.
     ports:
       - "3000:3000"
     environment:
@@ -24,6 +28,9 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/api/auth/google/callback}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3000}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_USER: ${MAIL_USER}
       MAIL_PASSWORD: ${MAIL_PASSWORD}

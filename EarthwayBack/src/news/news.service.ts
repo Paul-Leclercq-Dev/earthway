@@ -141,15 +141,14 @@ export class NewsService {
     this.logger.log('Démarrage du parsing RSS...');
 
     const rssSources = [
-      {
-        url: 'https://www.sciencesetavenir.fr/nature-environnement/rss.xml',
-        theme: NewsTheme.general,
-      },
-      {
-        url: 'https://www.futura-sciences.com/planete/rss/actu/',
-        theme: NewsTheme.general,
-      },
-      // Ajouter d'autres sources RSS selon les thèmes
+      // ✅ vérifié live, riche, FR (mais généraliste -> voir Option B)
+      { url: 'https://reporterre.net/spip.php?page=backend', theme: NewsTheme.general },
+      // ✅ confirmé par toi
+      { url: 'https://www.futura-sciences.com/planete/rss/actu/', theme: NewsTheme.general },
+      // ⚠️ à valider avec le diag wget avant de faire confiance
+      { url: 'https://www.goodplanet.info/feed/', theme: NewsTheme.general },
+      { url: 'https://www.actu-environnement.com/ae/rss/news.rss', theme: NewsTheme.general },
+      { url: 'https://www.notre-planete.info/rss/actualites.xml', theme: NewsTheme.general },
     ];
 
     let totalNew = 0;
@@ -157,7 +156,7 @@ export class NewsService {
     for (const source of rssSources) {
       try {
         const feed = await this.parser.parseURL(source.url);
-        
+
         for (const item of feed.items) {
           // Vérifier si l'article existe déjà (éviter doublons)
           const exists = await this.prisma.newsArticle.findFirst({

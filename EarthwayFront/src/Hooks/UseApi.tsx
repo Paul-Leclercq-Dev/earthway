@@ -1,14 +1,8 @@
-import axios, {AxiosInstance} from 'axios';
+import { useMemo } from 'react';
+import api from '../services/api';
 
 export function useApi() {
-
-    const headers = {
-        "Content-Type": "application/json"
-    }
-
-    const api : AxiosInstance = axios.create({
-        headers
-    })
-    
-    return api 
+  return useMemo(() => api, []);
 }
+
+export default useApi;
