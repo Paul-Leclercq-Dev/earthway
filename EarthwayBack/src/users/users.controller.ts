@@ -4,18 +4,33 @@ import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateEmailPreferencesDto } from './dto/update-email-preferences.dto';
 import { ImpactService } from '../impact/impact.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
+import { UserEntitlementsResponseDto } from './dto/user-entitlements.dto';
 
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly impactService: ImpactService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@Request() req) {
     return this.usersService.getMe(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me/entitlements')
+  async getMyEntitlements(@Request() req): Promise<UserEntitlementsResponseDto> {
+    const entitlements = await this.entitlementsService.resolveForUser(req.user.id);
+    const tier = await this.usersService.getCurrentTier(req.user.id);
+
+    return {
+      entitlements,
+      tier,
+    };
   }
 
   @UseGuards(JwtAuthGuard)

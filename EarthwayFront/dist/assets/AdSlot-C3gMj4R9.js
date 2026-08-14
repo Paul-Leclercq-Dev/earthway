@@ -1,1 +1,0 @@
-import{h as a,u as f,r as t}from"./index-DOmqR2MH.js";const l="none",i={FEED:"",DISPLAY:""};function m({format:A,slotKey:o,className:E=""}){var n;const{consent:e}=a(),{user:s}=f();t.useRef(null),t.useRef(!1);const c=((n=s==null?void 0:s.subscription)==null?void 0:n.status)==="active",r=e==="granted"&&!c&&l!=="none",u=i[o]??"";return t.useEffect(()=>{},[r,u]),null}export{m as A};

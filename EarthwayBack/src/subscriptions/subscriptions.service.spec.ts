@@ -16,6 +16,7 @@ const mockStripe = {
     },
   },
   subscriptions: {
+    retrieve: jest.fn(),
     update: jest.fn(),
   },
   customers: {
@@ -117,6 +118,7 @@ describe('SubscriptionsService', () => {
     jest.clearAllMocks();
     // Reset Stripe mocks
     mockStripe.checkout.sessions.create.mockReset();
+    mockStripe.subscriptions.retrieve.mockReset();
     mockStripe.subscriptions.update.mockReset();
     mockStripe.customers.create.mockReset();
   });
@@ -321,6 +323,58 @@ describe('SubscriptionsService', () => {
         }),
       );
       expect(mockStripe.customers.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Change Tier Tests
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('upgradeSubscriptionTier', () => {
+    it('should update Stripe subscription with prorated upgrade', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        subscription: { ...mockSubscription, stripeSubscriptionId: 'sub_123' },
+      });
+
+      mockStripe.subscriptions.retrieve.mockResolvedValue({
+        id: 'sub_123',
+        items: {
+          data: [{ id: 'si_123', price: { id: 'price_basic' } }],
+        },
+      });
+
+      const result = await service.upgradeSubscriptionTier(1, SubscriptionTier.premium);
+
+      expect(mockStripe.subscriptions.update).toHaveBeenCalledWith('sub_123', {
+        items: [{ id: 'si_123', price: 'price_premium' }],
+        proration_behavior: 'create_prorations',
+      });
+      expect(result.status).toBe('updated');
+    });
+  });
+
+  describe('downgradeSubscriptionTier', () => {
+    it('should update Stripe subscription at cycle end without immediate proration', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        subscription: { ...mockSubscription, stripeSubscriptionId: 'sub_123' },
+      });
+
+      mockStripe.subscriptions.retrieve.mockResolvedValue({
+        id: 'sub_123',
+        items: {
+          data: [{ id: 'si_123', price: { id: 'price_premium' } }],
+        },
+      });
+
+      const result = await service.downgradeSubscriptionTier(1, SubscriptionTier.basic);
+
+      expect(mockStripe.subscriptions.update).toHaveBeenCalledWith('sub_123', {
+        items: [{ id: 'si_123', price: 'price_basic' }],
+        proration_behavior: 'none',
+      });
+      expect(result.status).toBe('scheduled');
     });
   });
 

@@ -6,6 +6,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { WebhooksService } from './webhooks.service';
@@ -21,12 +22,13 @@ export class WebhooksController {
     @Headers('stripe-signature') signature: string,
   ) {
     const rawBody = req.rawBody;
-    if (!rawBody) {
-      return { received: false, error: 'No raw body' };
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      throw new BadRequestException('Missing raw request body for Stripe webhook verification');
     }
 
     const event = this.webhooksService.constructEvent(rawBody, signature);
     await this.webhooksService.queueEvent(event);
+
     return { received: true };
   }
 }

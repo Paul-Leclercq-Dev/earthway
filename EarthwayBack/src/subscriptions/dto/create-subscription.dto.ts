@@ -13,3 +13,8 @@ export class CreateSubscriptionDto {
   @IsString()
   stripePriceId: string;
 }
+
+export class UpdateSubscriptionTierDto {
+  @IsEnum(SubscriptionTierDto, { message: 'tier must be basic, premium or vip' })
+  tier: SubscriptionTierDto;
+}

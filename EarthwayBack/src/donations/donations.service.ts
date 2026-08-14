@@ -5,6 +5,7 @@ import { MailService } from '../mail/mail.service';
 import { StripeProvider } from '../config/stripe.provider';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { DonationCause, DonationStatus } from '@prisma/client';
+import { mapStripeError } from '../common/stripe-error.util';
 
 const CAUSE_NAMES: Record<DonationCause, string> = {
   trees: 'Reforestation',
@@ -53,8 +54,12 @@ export class DonationsService {
         automatic_payment_methods: { enabled: true },
       });
     } catch (error) {
-      this.logger.error(`Stripe PaymentIntent creation failed: ${(error as Error).message}`);
-      throw new BadGatewayException('Stripe request failed. Check your STRIPE_SECRET_KEY and Stripe account settings.');
+      const stripeError = mapStripeError(error);
+      this.logger.error(`Stripe PaymentIntent creation failed: ${stripeError.code} - ${stripeError.message}`);
+      throw new BadGatewayException({
+        code: stripeError.code,
+        message: stripeError.message,
+      });
     }
 
     const donation = await this.prisma.donation.create({

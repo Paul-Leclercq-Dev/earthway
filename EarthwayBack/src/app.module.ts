@@ -18,6 +18,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { UsersModule } from './users/users.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { AffiliateModule } from './affiliate/affiliate.module';
+import { EntitlementsModule } from './entitlements/entitlements.module';
 
 const isDockerRuntime = existsSync('/.dockerenv');
 const envRedisHost = process.env.REDIS_HOST || 'localhost';
@@ -53,6 +54,7 @@ const resolvedRedisHost = !isDockerRuntime && envRedisHost === 'redis' ? '127.0.
     MarketplaceModule,
     UsersModule,
     AffiliateModule,
+    EntitlementsModule,
   ],
   controllers: [AppController],
   providers: [

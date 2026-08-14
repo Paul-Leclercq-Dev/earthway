@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateEmailPreferencesDto } from './dto/update-email-preferences.dto';
+import { SubscriptionStatus, SubscriptionTier } from '@prisma/client';
+import { UserTier } from './dto/user-entitlements.dto';
 
 @Injectable()
 export class UsersService {
@@ -41,6 +43,29 @@ export class UsersService {
 
     const { password, refreshToken, ...publicUser } = user;
     return publicUser;
+  }
+
+  async getCurrentTier(userId: number): Promise<UserTier> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
+    });
+
+    if (!user?.subscription) {
+      return 'free';
+    }
+
+    const subscription = user.subscription;
+    const isActive =
+      subscription.status === SubscriptionStatus.active &&
+      subscription.currentPeriodEnd instanceof Date &&
+      subscription.currentPeriodEnd.getTime() > Date.now();
+
+    if (!isActive || !subscription.tier) {
+      return 'free';
+    }
+
+    return subscription.tier as SubscriptionTier as UserTier;
   }
 
   async updateMe(userId: number, dto: UpdateUserDto) {

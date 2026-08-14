@@ -3,9 +3,10 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ImpactModule } from '../impact/impact.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
-  imports: [PrismaModule, ImpactModule],
+  imports: [PrismaModule, ImpactModule, EntitlementsModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

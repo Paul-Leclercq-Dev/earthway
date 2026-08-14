@@ -2,6 +2,7 @@ import { Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import './App.css';
 import { AuthProvider } from './context/AuthContext';
+import { EntitlementsProvider } from './context/EntitlementsContext';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -59,11 +60,12 @@ function OAuthCallback() {
 function App() {
   return (
     <AuthProvider>
-      <OfflineIndicator />
-      <Layout>
-        <ErrorBoundary>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
+      <EntitlementsProvider>
+        <OfflineIndicator />
+        <Layout>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
               {/* Public routes */}
               <Route path="/" element={<Home />} />
               <Route path="/news" element={<News />} />
@@ -91,12 +93,13 @@ function App() {
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/donations" element={<Donations />} />
               <Route path="/marketplace" element={<Marketplace />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      </Layout>
-      <InstallPrompt />
-      <ConsentBanner />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </Layout>
+        <InstallPrompt />
+        <ConsentBanner />
+      </EntitlementsProvider>
     </AuthProvider>
   );
 }

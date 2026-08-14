@@ -2,6 +2,7 @@ services:
   frontend:
     build:
       context: ./EarthwayFront
+      dockerfile: dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
     ports:
@@ -15,6 +16,7 @@ services:
   backend:
     build:
       context: ./EarthwayBack
+      dockerfile: dockerfile
     command: sh -c "npx prisma db push && node dist/src/main"
     # Optional for local debugging and Google OAuth callback testing.
     # For a stricter reverse-proxy setup, remove this mapping and use only port 80 on frontend.

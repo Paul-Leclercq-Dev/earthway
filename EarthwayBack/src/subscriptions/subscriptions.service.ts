@@ -10,6 +10,7 @@ import { MailService } from '../mail/mail.service';
 import { StripeProvider } from '../config/stripe.provider';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { SubscriptionStatus, SubscriptionTier } from '@prisma/client';
+import { mapStripeError } from '../common/stripe-error.util';
 
 // Tier → price in cents (monthly), only used as fallback display
 export const TIER_PRICES: Record<string, number> = {
@@ -110,26 +111,126 @@ export class SubscriptionsService {
     // Get or create Stripe customer
     let stripeCustomerId = await this.getOrCreateStripeCustomer(user);
 
-    // Create Stripe Checkout Session
-    const session = await this.stripeProvider.checkout.sessions.create({
-      mode: 'subscription',
-      customer: stripeCustomerId,
-      line_items: [{ price: dto.stripePriceId, quantity: 1 }],
-      success_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=cancelled`,
-      metadata: {
-        userId: String(userId),
-        tier: dto.tier,
-      },
-      subscription_data: {
+    try {
+      // Create Stripe Checkout Session
+      const session = await this.stripeProvider.checkout.sessions.create({
+        mode: 'subscription',
+        customer: stripeCustomerId,
+        line_items: [{ price: dto.stripePriceId, quantity: 1 }],
+        success_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${this.config.get('FRONTEND_URL')}/subscriptions?checkout=cancelled`,
         metadata: {
           userId: String(userId),
           tier: dto.tier,
         },
-      },
+        subscription_data: {
+          metadata: {
+            userId: String(userId),
+            tier: dto.tier,
+          },
+        },
+      });
+
+      return { checkoutUrl: session.url, sessionId: session.id };
+    } catch (error) {
+      const stripeError = mapStripeError(error);
+      this.logger.error(`Stripe checkout creation failed: ${stripeError.code} - ${stripeError.message}`);
+      throw new BadRequestException({
+        code: stripeError.code,
+        message: stripeError.message,
+      });
+    }
+
+  }
+
+  // ─── Change subscription tier (Stripe source of truth) ───────────────────
+  // Upgrade: immediate prorated invoice via create_prorations.
+  // Downgrade: price change applied at the end of the current billing cycle with
+  // proration_behavior: 'none', so no immediate refund and no DB mutation here.
+  async upgradeSubscriptionTier(userId: number, targetTier: SubscriptionTier | string) {
+    const tier = targetTier as SubscriptionTier;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
     });
 
-    return { checkoutUrl: session.url, sessionId: session.id };
+    if (!user?.subscription || !user.subscription.stripeSubscriptionId) {
+      throw new BadRequestException('Aucun abonnement Stripe associé à votre compte.');
+    }
+
+    const newPriceId = this.getStripePriceIdForTier(tier);
+    if (!newPriceId) {
+      throw new BadRequestException('Ce tier n’est pas disponible pour la souscription.');
+    }
+
+    const currentSubscription = await this.stripeProvider.subscriptions.retrieve(
+      user.subscription.stripeSubscriptionId,
+    );
+    const currentItem = currentSubscription.items.data[0];
+
+    if (!currentItem) {
+      throw new BadRequestException('Aucun item de souscription Stripe trouvé pour cet abonnement.');
+    }
+
+    if (currentItem.price.id === newPriceId) {
+      return {
+        status: 'no_change',
+        message: 'Vous êtes déjà sur ce tier. Aucune modification n’a été appliquée.',
+      };
+    }
+
+    await this.stripeProvider.subscriptions.update(user.subscription.stripeSubscriptionId, {
+      items: [{ id: currentItem.id, price: newPriceId }],
+      proration_behavior: 'create_prorations',
+    });
+
+    return {
+      status: 'updated',
+      message: 'Votre abonnement a été mis à niveau. La différence a été calculée et facturée au prorata.',
+    };
+  }
+
+  async downgradeSubscriptionTier(userId: number, targetTier: SubscriptionTier | string) {
+    const tier = targetTier as SubscriptionTier;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
+    });
+
+    if (!user?.subscription || !user.subscription.stripeSubscriptionId) {
+      throw new BadRequestException('Aucun abonnement Stripe associé à votre compte.');
+    }
+
+    const newPriceId = this.getStripePriceIdForTier(tier);
+    if (!newPriceId) {
+      throw new BadRequestException('Ce tier n’est pas disponible pour la souscription.');
+    }
+
+    const currentSubscription = await this.stripeProvider.subscriptions.retrieve(
+      user.subscription.stripeSubscriptionId,
+    );
+    const currentItem = currentSubscription.items.data[0];
+
+    if (!currentItem) {
+      throw new BadRequestException('Aucun item de souscription Stripe trouvé pour cet abonnement.');
+    }
+
+    if (currentItem.price.id === newPriceId) {
+      return {
+        status: 'no_change',
+        message: 'Vous êtes déjà sur ce tier. Aucune modification n’a été appliquée.',
+      };
+    }
+
+    await this.stripeProvider.subscriptions.update(user.subscription.stripeSubscriptionId, {
+      items: [{ id: currentItem.id, price: newPriceId }],
+      proration_behavior: 'none',
+    });
+
+    return {
+      status: 'scheduled',
+      message: 'Votre changement de tier sera appliqué à la fin de la période courante. Aucun remboursement immédiat n’est effectué.',
+    };
   }
 
   // ─── Cancel subscription ──────────────────────────────────────────────────
@@ -259,6 +360,12 @@ export class SubscriptionsService {
     });
 
     return customer.id;
+  }
+
+  private getStripePriceIdForTier(tier: SubscriptionTier | string): string | null {
+    const priceKey = `STRIPE_PRICE_${String(tier).toUpperCase()}`;
+    const priceId = this.config.get<string>(priceKey);
+    return priceId || null;
   }
 
   private mapStripeStatus(status: string): SubscriptionStatus {

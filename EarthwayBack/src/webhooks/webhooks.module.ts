@@ -7,6 +7,7 @@ import { StripeProvider } from '../config/stripe.provider';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { DonationsModule } from '../donations/donations.module';
 import { ImpactModule } from '../impact/impact.module';
+import { MailModule } from '../mail/mail.module';
 import { WebhooksProcessor } from './webhooks.processor';
 
 @Module({
@@ -15,8 +16,9 @@ import { WebhooksProcessor } from './webhooks.processor';
     SubscriptionsModule,
     DonationsModule,
     ImpactModule,
+    MailModule,
     BullModule.registerQueue({
-      name: 'webhooks',
+      name: 'stripe-events',
       defaultJobOptions: {
         attempts: 5,
         backoff: { type: 'exponential', delay: 2000 },

@@ -75,7 +75,10 @@ function DonationPaymentForm({
     });
 
     if (error) {
-      onError(error.message || 'Le paiement n’a pas pu être confirmé.');
+      const mapped = error.payment_intent
+        ? 'Une vérification supplémentaire est requise par votre banque pour finaliser le paiement.'
+        : error.message || 'Le paiement n’a pas pu être confirmé.';
+      onError(mapped);
       setProcessing(false);
       return;
     }
@@ -222,8 +225,12 @@ const Donations: React.FC = () => {
       setClientSecret(data.clientSecret);
       setPendingDonationId(data.donationId);
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Une erreur est survenue. Veuillez réessayer.';
-      setError(Array.isArray(message) ? message.join(', ') : message);
+      const payload = err?.response?.data;
+      const code = typeof payload?.code === 'string' ? payload.code : 'unknown_error';
+      const message = typeof payload?.message === 'string'
+        ? payload.message
+        : err?.message || 'Une erreur est survenue. Veuillez réessayer.';
+      setError(`${message} ${code !== 'unknown_error' ? `(${code})` : ''}`.trim());
     } finally {
       setLoading(false);
     }

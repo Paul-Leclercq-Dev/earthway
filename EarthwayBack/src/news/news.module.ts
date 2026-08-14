@@ -7,10 +7,12 @@ import { NewsService } from './news.service';
 import { NewsController } from './news.controller';
 import { NewsProcessor } from './news.processor';
 import { REDIS_CLIENT } from './news.constants';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
   imports: [
     ConfigModule,
+    EntitlementsModule,
     BullModule.registerQueue({
       name: 'news',
     }),

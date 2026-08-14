@@ -259,22 +259,16 @@ model EmailPreference {
 }
 
 model WebhookLog {
-  id        Int           @id @default(autoincrement())
-  eventId   String        @unique
+  id        Int      @id @default(autoincrement())
+  eventId   String   @unique
   type      String
-  status    WebhookStatus @default(pending)
-  payload   String
-  createdAt DateTime      @default(now())
+  status    String   @default("received")
+  payload   Json
+  createdAt DateTime @default(now())
 
   @@index([eventId])
   @@index([status])
   @@map("webhook_log")
-}
-
-enum WebhookStatus {
-  pending
-  processed
-  failed
 }
 
 model Product {

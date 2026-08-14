@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import * as express from 'express';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 function isIgnorableRedisError(error: unknown): boolean {
@@ -34,6 +35,8 @@ process.on('uncaughtException', (error) => {
 async function bootstrap() {
   // rawBody must be enabled so Stripe signature verification can use the exact payload bytes.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+
+  app.use('/api/webhooks/stripe', express.raw({ type: '*/*' }));
 
   // Security: HTTP headers
   app.use(helmet());

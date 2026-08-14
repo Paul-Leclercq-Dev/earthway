@@ -5,9 +5,13 @@ import {
   Query,
   ParseIntPipe,
   NotFoundException,
+  UseGuards,
 } from '@nestjs/common';
 import { NewsService } from './news.service';
 import { NewsQueryDto } from './dto/news-article.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireEntitlement } from '../entitlements/entitlements.decorator';
+import { EntitlementsGuard } from '../entitlements/entitlements.guard';
 
 @Controller('news')
 export class NewsController {
@@ -42,6 +46,16 @@ export class NewsController {
    * GET /api/news/rss/trigger
    * Déclenche manuellement le parsing RSS (admin only - à protéger plus tard)
    */
+  @UseGuards(JwtAuthGuard, EntitlementsGuard)
+  @RequireEntitlement('premium_news')
+  @Get('premium/insights')
+  async getPremiumInsights() {
+    return {
+      message: 'Accès premium_news autorisé.',
+      premium: true,
+    };
+  }
+
   @Get('rss/trigger')
   async triggerRSS() {
     return this.newsService.triggerRSSJob();

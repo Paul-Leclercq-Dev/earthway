@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; padding: 0; background: #f4f7f0; font-family: 'Segoe UI', Arial, sans-serif; }
+    .container { max-width: 600px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #f59e0b, #d97706); padding: 36px 32px; text-align: center; }
+    .header h1 { color: #ffffff; font-size: 22px; margin: 0; }
+    .body { padding: 32px; }
+    .body p { color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px; }
+    .box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 20px; margin: 24px 0; }
+    .box p { margin: 4px 0; color: #9a5b00; font-size: 15px; }
+    .cta { display: block; width: fit-content; margin: 24px auto; background: #f59e0b; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; }
+    .footer { background: #f9fafb; padding: 20px 32px; text-align: center; }
+    .footer p { color: #9ca3af; font-size: 13px; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⚠️ Paiement de votre abonnement refusé</h1>
+    </div>
+    <div class="body">
+      <p>Bonjour <strong>{{firstName}}</strong>,</p>
+      <p>
+        Le prélèvement de votre abonnement <strong>{{tierName}}</strong> d’un montant de <strong>{{amount}} €</strong>
+        n’a pas pu être accepté.
+      </p>
+
+      <div class="box">
+        <p><strong>Détails</strong></p>
+        <p>Formule : <strong>{{tierName}}</strong></p>
+        <p>Montant : <strong>{{amount}} €</strong></p>
+        <p>Date prévue : <strong>{{dueDate}}</strong></p>
+      </div>
+
+      <p>
+        Pour éviter toute interruption de votre soutien, veuillez vérifier votre moyen de paiement ou mettre à jour vos informations bancaires depuis votre espace Earthway.
+      </p>
+      <a href="{{subscriptionsUrl}}" class="cta">Mettre à jour mon paiement</a>
+    </div>
+    <div class="footer">
+      <p>© {{year}} Earthway · Ensemble pour la planète</p>
+    </div>
+  </div>
+</body>
+</html>

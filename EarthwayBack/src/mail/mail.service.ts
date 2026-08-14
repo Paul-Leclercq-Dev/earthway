@@ -134,6 +134,31 @@ export class MailService {
     });
   }
 
+  async sendSubscriptionPaymentFailedEmail(
+    email: string,
+    firstName: string,
+    tierName: string,
+    amount: number,
+    dueDate: Date,
+  ) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Earthway - Paiement de votre abonnement refusé',
+      template: 'subscription-payment-failed',
+      context: {
+        firstName,
+        tierName,
+        amount,
+        dueDate: dueDate.toLocaleDateString('fr-FR'),
+        subscriptionsUrl: `${frontendUrl}/subscriptions`,
+        profileUrl: `${frontendUrl}/profile`,
+        year: new Date().getFullYear(),
+      },
+    });
+  }
+
   async sendUserConfirmation() {
     try {
       await this.mailerService.sendMail({});

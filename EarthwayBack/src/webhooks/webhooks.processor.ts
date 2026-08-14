@@ -3,13 +3,13 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { WebhooksService } from './webhooks.service';
 
-@Processor('webhooks')
+@Processor('stripe-events')
 export class WebhooksProcessor {
   private readonly logger = new Logger(WebhooksProcessor.name);
 
   constructor(private readonly webhooksService: WebhooksService) {}
 
-  @Process('process-stripe-event')
+  @Process('process-event')
   async processStripeEvent(job: Job<{ eventId: string }>) {
     const { eventId } = job.data;
     this.logger.log(`Dequeued Stripe eventId=${eventId} jobId=${job.id}`);

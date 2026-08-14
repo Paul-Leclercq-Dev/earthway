@@ -80,8 +80,12 @@ const Subscriptions: React.FC = () => {
       // Redirect to Stripe Checkout
       window.location.href = data.checkoutUrl;
     } catch (err: any) {
-      const message = err?.response?.data?.message || 'Une erreur est survenue.';
-      setError(Array.isArray(message) ? message.join(', ') : message);
+      const payload = err?.response?.data;
+      const code = typeof payload?.code === 'string' ? payload.code : 'unknown_error';
+      const message = typeof payload?.message === 'string'
+        ? payload.message
+        : 'Une erreur est survenue.';
+      setError(`${message} ${code !== 'unknown_error' ? `(${code})` : ''}`.trim());
       setSubscribing(null);
     }
   };

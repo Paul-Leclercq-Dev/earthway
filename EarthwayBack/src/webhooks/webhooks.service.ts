@@ -13,6 +13,7 @@ import { StripeProvider } from '../config/stripe.provider';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { DonationsService } from '../donations/donations.service';
 import { ImpactService } from '../impact/impact.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class WebhooksService {
@@ -22,10 +23,11 @@ export class WebhooksService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly stripeProvider: StripeProvider,
-    @InjectQueue('webhooks') private readonly webhooksQueue: Queue,
+    @InjectQueue('stripe-events') private readonly webhooksQueue: Queue,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly donationsService: DonationsService,
     private readonly impactService: ImpactService,
+    private readonly mailService: MailService,
   ) {}
 
   constructEvent(rawBody: Buffer, signature?: string): Stripe.Event {
@@ -45,13 +47,15 @@ export class WebhooksService {
     }
   }
 
-  async queueEvent(event: Stripe.Event): Promise<{ duplicate: boolean }> {
+  async handleEvent(event: Stripe.Event): Promise<{ duplicate: boolean }> {
     const existing = await this.prisma.webhookLog.findUnique({
       where: { eventId: event.id },
     });
 
     if (existing) {
-      this.logger.log(`Webhook duplicate ignored eventId=${event.id} type=${event.type} status=${existing.status}`);
+      this.logger.log(
+        `Webhook duplicate ignored eventId=${event.id} type=${event.type} status=${existing.status}`,
+      );
       return { duplicate: true };
     }
 
@@ -60,8 +64,8 @@ export class WebhooksService {
         data: {
           eventId: event.id,
           type: event.type,
-          status: 'pending',
-          payload: JSON.stringify(event),
+          status: 'received',
+          payload: event as unknown as Prisma.InputJsonValue,
         },
       });
     } catch (error) {
@@ -72,13 +76,14 @@ export class WebhooksService {
       throw error;
     }
 
-    await this.webhooksQueue.add(
-      'process-stripe-event',
-      { eventId: event.id },
-    );
+    await this.webhooksQueue.add('process-event', { eventId: event.id });
 
     this.logger.log(`Webhook queued eventId=${event.id} type=${event.type}`);
     return { duplicate: false };
+  }
+
+  async queueEvent(event: Stripe.Event): Promise<{ duplicate: boolean }> {
+    return this.handleEvent(event);
   }
 
   async processQueuedEvent(eventId: string): Promise<void> {
@@ -93,13 +98,9 @@ export class WebhooksService {
       return;
     }
 
-    let event: Stripe.Event;
-    try {
-      event = JSON.parse(log.payload) as Stripe.Event;
-    } catch (error) {
-      this.logger.error(
-        `Webhook payload parse failed eventId=${eventId} error=${(error as Error).message}`,
-      );
+    const event = log.payload as unknown as Stripe.Event;
+    if (!event || !event.id || !event.type) {
+      this.logger.error(`Webhook payload invalid eventId=${eventId}`);
       await this.markWebhookFailed(eventId);
       return;
     }
@@ -199,7 +200,19 @@ export class WebhooksService {
             },
           },
         });
+
         if (user) {
+          try {
+            await this.mailService.sendSubscriptionPaymentFailedEmail(
+              user.email,
+              user.firstName,
+              tier,
+              Number(invoice.total ?? 0) / 100,
+              new Date(),
+            );
+          } catch (mailError) {
+            this.logger.warn(`Failed to send subscription payment failure email eventId=${event.id}: ${(mailError as Error).message}`);
+          }
           await this.impactService.recalculateImpact(user.id);
         }
         break;
