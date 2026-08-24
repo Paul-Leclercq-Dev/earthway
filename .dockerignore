@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+.github
+
+# OS / editor
+.DS_Store
+.vscode
+.idea
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+**/dist
+**/build
+**/.next
+**/coverage
+
+# Docker local data
+/docker-data
+**/docker-data
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Misc
+*.tmp
+*.swp
