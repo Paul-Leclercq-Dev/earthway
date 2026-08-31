@@ -9,6 +9,8 @@ async function main() {
   // Clear existing data (optional, for dev)
   await prisma.affiliateClickLog.deleteMany();
   await prisma.affiliateLink.deleteMany();
+  await prisma.adEvent.deleteMany();
+  await prisma.ad.deleteMany();
   await prisma.impact.deleteMany();
   await prisma.emailPreference.deleteMany();
   await prisma.webhookLog.deleteMany();
@@ -422,6 +424,45 @@ async function main() {
   ]);
 
   console.log('✅ Affiliate links created');
+
+  // 11. Create Ads
+  await Promise.all([
+    prisma.ad.create({
+      data: {
+        title: 'Soutenez la reforestation',
+        imageUrl: 'https://picsum.photos/1200/600?random=21',
+        targetUrl: 'https://earthway.example.com/reforestation',
+        placement: 'home_hero',
+        partner: 'Reforest\'Action',
+        weight: 5,
+        isActive: true,
+      },
+    }),
+    prisma.ad.create({
+      data: {
+        title: 'Explorez les actions pour les océans',
+        imageUrl: 'https://picsum.photos/1200/600?random=22',
+        targetUrl: 'https://earthway.example.com/oceans',
+        placement: 'news_feed',
+        partner: 'Coral Guardian',
+        weight: 3,
+        isActive: true,
+      },
+    }),
+    prisma.ad.create({
+      data: {
+        title: 'Découvrez nos partenaires responsables',
+        imageUrl: 'https://picsum.photos/1200/600?random=23',
+        targetUrl: 'https://earthway.example.com/marketplace',
+        placement: 'marketplace_footer',
+        partner: 'Earthway Partners',
+        weight: 1,
+        isActive: true,
+      },
+    }),
+  ]);
+
+  console.log('✅ Ads created');
 
   // 9. Create Impact records for users
   await Promise.all([

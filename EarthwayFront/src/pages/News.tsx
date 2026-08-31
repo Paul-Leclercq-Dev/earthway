@@ -159,14 +159,23 @@ const News: React.FC = () => {
         )}
 
         {!loading && !error && articles.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles.map((article) => (
-              <NewsCard key={article.id} article={article} />
-            ))}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {articles.map((article, index) => (
+                <React.Fragment key={article.id}>
+                  <NewsCard article={article} />
+                  {(index + 1) % 5 === 0 && index + 1 < articles.length && (
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <AdSlot placement="news_feed" />
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {articles.length < 5 && <AdSlot placement="news_feed" />}
           </div>
         )}
-
-        <AdSlot format="in-feed" slotKey="FEED" className="my-6" />
 
         {/* Pagination */}
         {!loading && totalPages > 1 && (

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import * as crypto from 'crypto';
+import { hashIpAddress } from '../common/privacy.util';
 
 @Injectable()
 export class AffiliateService {
@@ -57,9 +57,7 @@ export class AffiliateService {
     if (!link) return;
 
     // Hash the IP for RGPD compliance
-    const ipHash = ip
-      ? crypto.createHash('sha256').update(ip).digest('hex')
-      : null;
+    const ipHash = hashIpAddress(ip);
 
     await this.prisma.affiliateClickLog.create({
       data: {

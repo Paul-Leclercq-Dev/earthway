@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 export interface JwtPayload {
   sub: number;
   email: string;
+  userId?: number;
 }
 
 @Injectable()
@@ -23,12 +24,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    if (!payload.sub || !payload.email) {
+    const resolvedUserId = payload.userId ?? payload.sub;
+
+    if (!resolvedUserId || !payload.email) {
       throw new UnauthorizedException('Invalid token payload');
     }
-    
+
     return {
-      id: payload.sub,
+      id: resolvedUserId,
+      userId: resolvedUserId,
       email: payload.email,
     };
   }

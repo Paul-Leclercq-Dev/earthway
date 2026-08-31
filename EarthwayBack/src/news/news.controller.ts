@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { NewsService } from './news.service';
 import { NewsQueryDto } from './dto/news-article.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,6 +24,7 @@ export class NewsController {
    * Query params: theme, search, page, limit
    */
   @Get()
+  @SkipThrottle()
   async findAll(@Query() query: NewsQueryDto) {
     return this.newsService.findAll(query);
   }
@@ -32,6 +34,7 @@ export class NewsController {
    * Récupère un article par ID
    */
   @Get(':id')
+  @SkipThrottle()
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const article = await this.newsService.findOne(id);
     

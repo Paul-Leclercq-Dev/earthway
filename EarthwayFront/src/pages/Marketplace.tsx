@@ -100,7 +100,7 @@ export default function Marketplace() {
         </div>
       )}
 
-      <AdSlot format="display" slotKey="DISPLAY" className="mt-8" />
+      <AdSlot placement="marketplace_footer" />
 
       {/* Info banner */}
       <div className="mt-12 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">

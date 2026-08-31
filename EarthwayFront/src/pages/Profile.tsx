@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../Hooks/useAuth';
+import { useEntitlements } from '../Hooks/useEntitlements';
 import { useNavigate } from 'react-router-dom';
 import ImpactDashboard from '../components/ImpactDashboard';
 import ConfirmModal from '../components/ConfirmModal';
@@ -42,6 +43,7 @@ interface UserProfile {
 
 export default function Profile() {
   const { logout } = useAuth();
+  const { tier } = useEntitlements();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [progression, setProgression] = useState<Progression | null>(null);
@@ -177,24 +179,43 @@ export default function Profile() {
       )}
 
       {/* Subscription status */}
-      {profile.subscription && (
+      {tier !== 'free' ? (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-800 mb-3">Abonnement actif</h2>
           <div className="flex items-center justify-between">
             <div>
               <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium text-sm uppercase">
-                {profile.subscription.tier}
+                {tier}
               </span>
-              <p className="text-sm text-gray-500 mt-2">
-                Prochain renouvlement :{' '}
-                {new Date(profile.subscription.currentPeriodEnd).toLocaleDateString('fr-FR')}
-              </p>
+              {profile.subscription?.currentPeriodEnd && (
+                <p className="text-sm text-gray-500 mt-2">
+                  Prochain renouvellement :{' '}
+                  {new Date(profile.subscription.currentPeriodEnd).toLocaleDateString('fr-FR')}
+                </p>
+              )}
             </div>
             <button
               onClick={() => navigate('/subscriptions')}
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
             >
               Gérer
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Aucun abonnement actif</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">
+                Découvrez nos offres pour accéder à des avantages supplémentaires.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/subscriptions')}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
+            >
+              Découvrir les offres
             </button>
           </div>
         </div>

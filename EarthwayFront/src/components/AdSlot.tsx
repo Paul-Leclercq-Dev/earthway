@@ -1,90 +1,128 @@
-import { useEffect, useRef } from 'react';
-import { useConsent } from '../Hooks/useConsent';
-import { useAuth } from '../Hooks/useAuth';
+import { useEffect, useState } from 'react';
+import { useEntitlements } from '../Hooks/useEntitlements';
+import api from '../services/api';
 
-type AdFormat = 'in-feed' | 'display' | 'native';
-
-interface Props {
-  format: AdFormat;
-  /** Slot key that maps to env var VITE_ADSENSE_SLOT_{KEY} */
-  slotKey: 'FEED' | 'DISPLAY';
-  className?: string;
-}
-
-const AD_PROVIDER = import.meta.env.VITE_AD_PROVIDER ?? 'none';
-const ADSENSE_CLIENT = import.meta.env.VITE_ADSENSE_CLIENT ?? '';
-const SLOT_MAP: Record<string, string> = {
-  FEED: import.meta.env.VITE_ADSENSE_SLOT_FEED ?? '',
-  DISPLAY: import.meta.env.VITE_ADSENSE_SLOT_DISPLAY ?? '',
+type Ad = {
+  id: number;
+  title: string;
+  imageUrl: string;
+  targetUrl: string;
+  partner: string | null;
 };
 
-let adsenseScriptLoaded = false;
+type Props = {
+  placement: string;
+};
 
-function loadAdSenseScript() {
-  if (adsenseScriptLoaded || !ADSENSE_CLIENT) return;
-  adsenseScriptLoaded = true;
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
-  script.crossOrigin = 'anonymous';
-  document.head.appendChild(script);
-}
-
-export default function AdSlot({ format, slotKey, className = '' }: Props) {
-  const { consent } = useConsent();
-  const { user } = useAuth();
-  const adRef = useRef<HTMLModElement>(null);
-  const pushed = useRef(false);
-
-  // Rule 1: Never show ads to active subscribers
-  const isSubscriber = (user as { subscription?: { status?: string } } | null)
-    ?.subscription?.status === 'active';
-
-  // Rule 2: Require explicit consent
-  const canShow = consent === 'granted' && !isSubscriber && AD_PROVIDER !== 'none';
-
-  const slotId = SLOT_MAP[slotKey] ?? '';
+export default function AdSlot({ placement }: Props) {
+  const { has, loading: entitlementsLoading } = useEntitlements();
+  const adsFree = has('ads_free');
+  const [ad, setAd] = useState<Ad | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!canShow || !slotId || pushed.current) return;
-    if (AD_PROVIDER === 'adsense') {
-      loadAdSenseScript();
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-        pushed.current = true;
-      } catch {
-        // AdSense not ready yet
-      }
+    if (entitlementsLoading) {
+      return;
     }
-    // Media.net stub — activate by setting VITE_AD_PROVIDER=medianet
-    // if (AD_PROVIDER === 'medianet') { /* renderMediaNet(adRef.current, slotId) */ }
-  }, [canShow, slotId]);
 
-  if (!canShow || !slotId) return null;
+    if (adsFree) {                            // <-- on lit le booléen
+      setAd(null);
+      setLoading(false);
+      return;
+    }
 
-  const sizeClass =
-    format === 'in-feed'
-      ? 'w-full min-h-[100px]'
-      : format === 'display'
-      ? 'w-full min-h-[250px]'
-      : 'w-full min-h-[90px]';
+    if (has('ads_free')) {
+      setAd(null);
+      setLoading(false);
+      return;
+    }
 
-  if (AD_PROVIDER === 'adsense') {
-    return (
-      <div className={`overflow-hidden rounded-lg ${sizeClass} ${className}`} aria-label="Publicité">
-        <ins
-          ref={adRef}
-          className="adsbygoogle"
-          style={{ display: 'block' }}
-          data-ad-client={ADSENSE_CLIENT}
-          data-ad-slot={slotId}
-          data-ad-format={format === 'in-feed' ? 'fluid' : 'auto'}
-          data-full-width-responsive="true"
-        />
-      </div>
-    );
+    let cancelled = false;
+
+    const loadAd = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get<Ad>('/ads', {
+          params: { placement },
+          validateStatus: (status) => status === 200 || status === 204,
+        });
+
+        if (cancelled || response.status === 204 || !response.data) {
+          setAd(null);
+          return;
+        }
+
+        setAd(response.data);
+
+        await api.post(`/ads/${response.data.id}/event`, {
+          type: 'impression',
+        });
+      } catch {
+        if (!cancelled) {
+          setAd(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadAd();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [placement, adsFree, entitlementsLoading]);
+
+  if (entitlementsLoading || loading || !ad) {
+    return null;
   }
 
-  return null;
+  const handleClick = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+
+    try {
+      await api.post(`/ads/${ad.id}/event`, {
+        type: 'click',
+      });
+    } catch {
+      // Ignore tracking failures to keep navigation fluid.
+    }
+
+    window.open(ad.targetUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <section className="my-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-100 px-4 py-2">
+        <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+          Sponsorisé
+        </span>
+      </div>
+      <a
+        href={ad.targetUrl}
+        target="_blank"
+        rel="noopener noreferrer nofollow sponsored"
+        onClick={handleClick}
+        className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-gray-50 sm:flex-row sm:items-center"
+      >
+        <div className="overflow-hidden rounded-xl bg-gray-100 sm:h-28 sm:w-44 sm:flex-none">
+          <img
+            src={ad.imageUrl}
+            alt={ad.title}
+            className="h-48 w-full object-cover sm:h-full"
+            loading="lazy"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">{ad.title}</p>
+          <p className="mt-1 text-sm text-gray-600">{ad.partner ?? 'Partenaire Earthway'}</p>
+          <p className="mt-2 text-sm text-emerald-700 underline decoration-emerald-300 underline-offset-2">
+            Découvrir l'offre
+          </p>
+        </div>
+      </a>
+    </section>
+  );
 }

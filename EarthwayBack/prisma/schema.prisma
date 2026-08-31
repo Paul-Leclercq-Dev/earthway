@@ -258,6 +258,42 @@ model EmailPreference {
   @@map("email_preference")
 }
 
+model Ad {
+  id        Int       @id @default(autoincrement())
+  title     String
+  imageUrl  String
+  targetUrl String
+  placement String
+  partner   String?
+  weight    Int       @default(1)
+  isActive  Boolean   @default(true)
+  startAt   DateTime?
+  endAt     DateTime?
+  events    AdEvent[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([placement])
+  @@index([isActive])
+  @@map("ad")
+}
+
+model AdEvent {
+  id        Int      @id @default(autoincrement())
+  adId      Int
+  ad        Ad       @relation(fields: [adId], references: [id])
+  type      String
+  userId    Int?
+  ipHash    String?
+  referrer  String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([adId])
+  @@index([createdAt])
+  @@map("ad_event")
+}
+
 model WebhookLog {
   id        Int      @id @default(autoincrement())
   eventId   String   @unique

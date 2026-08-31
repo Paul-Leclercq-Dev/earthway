@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom"
+import AdSlot from '../components/AdSlot'
 
 import reforestation from "../assets/image/accueil/reforestation.png"
 import coraux from "../assets/image/accueil/coraux.png"
@@ -50,6 +51,10 @@ export default function Home() {
                 >
                     Consulter les actualités environnementales →
                 </NavLink>
+
+                <div className="mt-10 w-full max-w-4xl">
+                    <AdSlot placement="home_hero" />
+                </div>
             </section>
 
             {/* Thématiques Section */}

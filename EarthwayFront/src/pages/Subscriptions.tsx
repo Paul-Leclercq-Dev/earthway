@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Hooks/useAuth';
+import { useEntitlements } from '../Hooks/useEntitlements';
 import { subscriptionService, SubscriptionTier } from '../services/subscriptionService';
 
 const TIER_ICONS: Record<string, string> = {
@@ -32,6 +33,7 @@ const TIER_COLORS: Record<string, { bg: string; border: string; cta: string; bad
 
 const Subscriptions: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { tier, loading: entitlementsLoading } = useEntitlements();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -98,7 +100,16 @@ const Subscriptions: React.FC = () => {
     );
   }
 
-  const hasActiveSub = currentSub?.status === 'active';
+  if (entitlementsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-16">
+        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const hasActiveSub = tier !== 'free';
+  const activeTier = tiers.find((plan) => plan.id === tier) ?? null;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white pt-16 pb-16">
@@ -120,12 +131,14 @@ const Subscriptions: React.FC = () => {
             <span className="text-2xl">✅</span>
             <div>
               <p className="font-semibold text-emerald-800">
-                Abonnement actif : {currentSub.name}
+                Abonnement actif : {activeTier?.name ?? tier}
               </p>
-              <p className="text-sm text-emerald-600">
-                Prochain prélèvement le{' '}
-                {new Date(currentSub.currentPeriodEnd).toLocaleDateString('fr-FR')}
-              </p>
+              {currentSub?.currentPeriodEnd && (
+                <p className="text-sm text-emerald-600">
+                  Prochain prélèvement le{' '}
+                  {new Date(currentSub.currentPeriodEnd).toLocaleDateString('fr-FR')}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -157,7 +170,7 @@ const Subscriptions: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {tiers.map((tier) => {
             const colors = TIER_COLORS[tier.id] ?? TIER_COLORS.basic;
-            const isCurrentTier = currentSub?.tier === tier.id && hasActiveSub;
+            const isCurrentTier = tier.id === activeTier?.id && hasActiveSub;
             const isPopular = tier.id === 'premium';
 
             return (

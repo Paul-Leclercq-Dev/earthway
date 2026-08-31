@@ -17,6 +17,55 @@ export class NewsService {
   private readonly parser: any;
   private readonly cacheTtl: number;
 
+  private readonly subjectThemeHints: Array<{ theme: NewsTheme; keywords: string[] }> = [
+    {
+      theme: NewsTheme.oceans,
+      keywords: [
+        'oceans',
+        'ocean',
+        'océan',
+        'océans',
+        'mer',
+        'marin',
+        'corail',
+        'coraux',
+        'poisson',
+        'peche',
+        'pêche',
+        'littoral',
+        'meduse',
+        'méduse',
+        'arctique',
+        'banquise',
+      ],
+    },
+    {
+      theme: NewsTheme.pollinators,
+      keywords: ['pollinisateur', 'abeille', 'apicult', 'ruche', 'bourdon', 'papillon', 'insecte'],
+    },
+    {
+      theme: NewsTheme.reforestation,
+      keywords: ['foret', 'forêt', 'arbre', 'reforest', 'deforestation', 'déforestation', 'boisement', 'sylvicult', 'bois'],
+    },
+    {
+      theme: NewsTheme.innovations,
+      keywords: [
+        'energie',
+        'énergie',
+        'innovation',
+        'technolog',
+        'startup',
+        'renouvelable',
+        'solaire',
+        'eolien',
+        'éolien',
+        'batterie',
+        'recyclage',
+        'capture de co2',
+      ],
+    },
+  ];
+
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
@@ -30,9 +79,147 @@ export class NewsService {
 
     this.parser = new Parser({
       customFields: {
-        item: ['media:content', 'media:thumbnail', 'enclosure'],
+        item: ['media:content', 'media:thumbnail', 'enclosure', 'dc:subject', 'category'],
       },
     });
+  }
+
+  classifyTheme(text: string): NewsTheme {
+    const normalized = text.toLowerCase();
+
+    // Specific themes first; general is the final fallback.
+    if (
+      normalized.includes('océan')
+      || normalized.includes('ocean')
+      || normalized.includes('mer')
+      || normalized.includes('marin')
+      || normalized.includes('corail')
+      || normalized.includes('coraux')
+      || normalized.includes('poisson')
+      || normalized.includes('pêche')
+      || normalized.includes('littoral')
+      || normalized.includes('méduse')
+      || normalized.includes('arctique')
+      || normalized.includes('banquise')
+    ) {
+      return NewsTheme.oceans;
+    }
+
+    if (
+      normalized.includes('abeille')
+      || normalized.includes('pollinisateur')
+      || normalized.includes('apicult')
+      || normalized.includes('ruche')
+      || normalized.includes('bourdon')
+      || normalized.includes('papillon')
+      || normalized.includes('insecte')
+    ) {
+      return NewsTheme.pollinators;
+    }
+
+    if (
+      normalized.includes('forêt')
+      || normalized.includes('arbre')
+      || normalized.includes('reforest')
+      || normalized.includes('déforestation')
+      || normalized.includes('boisement')
+      || normalized.includes('sylvicult')
+      || normalized.includes('bois')
+    ) {
+      return NewsTheme.reforestation;
+    }
+
+    if (
+      normalized.includes('innovation')
+      || normalized.includes('technolog')
+      || normalized.includes('startup')
+      || normalized.includes('renouvelable')
+      || normalized.includes('solaire')
+      || normalized.includes('éolien')
+      || normalized.includes('batterie')
+      || normalized.includes('recyclage')
+      || normalized.includes('capture de co2')
+    ) {
+      return NewsTheme.innovations;
+    }
+
+    return NewsTheme.general;
+  }
+
+  private toSubjectText(subject: unknown): string {
+    if (typeof subject === 'string') {
+      return subject;
+    }
+
+    if (subject && typeof subject === 'object') {
+      const maybeText = (subject as { _: unknown })._;
+      if (typeof maybeText === 'string') {
+        return maybeText;
+      }
+    }
+
+    return '';
+  }
+
+  private extractSubjects(item: Record<string, unknown>): string[] {
+    const values: unknown[] = [];
+    const dcSubject = item['dc:subject'];
+    const category = item.category;
+
+    if (Array.isArray(dcSubject)) {
+      values.push(...dcSubject);
+    } else if (dcSubject) {
+      values.push(dcSubject);
+    }
+
+    if (Array.isArray(category)) {
+      values.push(...category);
+    } else if (category) {
+      values.push(category);
+    }
+
+    return values
+      .map((value) => this.toSubjectText(value).trim())
+      .filter((value) => value.length > 0);
+  }
+
+  private classifyThemeFromSubjects(subjects: string[]): NewsTheme | null {
+    if (subjects.length === 0) {
+      return null;
+    }
+
+    const normalizedSubjects = subjects.join(' ').toLowerCase();
+
+    for (const config of this.subjectThemeHints) {
+      if (config.keywords.some((keyword) => normalizedSubjects.includes(keyword))) {
+        return config.theme;
+      }
+    }
+
+    return null;
+  }
+
+  async reclassifyExistingArticles() {
+    const generalArticles = await this.prisma.newsArticle.findMany({
+      where: { theme: NewsTheme.general },
+      select: { id: true, title: true, summary: true },
+    });
+
+    let reclassified = 0;
+
+    for (const article of generalArticles) {
+      const recalculatedTheme = this.classifyTheme(`${article.title ?? ''} ${article.summary ?? ''}`);
+
+      if (recalculatedTheme !== NewsTheme.general) {
+        await this.prisma.newsArticle.update({
+          where: { id: article.id },
+          data: { theme: recalculatedTheme },
+        });
+        reclassified++;
+      }
+    }
+
+    return reclassified;
   }
 
   /**
@@ -164,6 +351,9 @@ export class NewsService {
           });
 
           if (!exists && item.link) {
+            const subjects = this.extractSubjects(item as Record<string, unknown>);
+            const subjectTheme = this.classifyThemeFromSubjects(subjects);
+
             // Extraire l'image (plusieurs formats possibles)
             let imageUrl = item.enclosure?.url || null;
             if (!imageUrl && item['media:content']) {
@@ -182,7 +372,7 @@ export class NewsService {
                 imageUrl,
                 source: feed.title || 'RSS Feed',
                 author: item.creator || item.author || null,
-                theme: source.theme,
+                theme: subjectTheme ?? this.classifyTheme(`${item.title ?? ''} ${item.contentSnippet ?? ''} ${subjects.join(' ')}`),
                 publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
               },
             });
@@ -210,9 +400,12 @@ export class NewsService {
    */
   async triggerRSSJob() {
     const result = await this.fetchAndStoreRSSArticles();
+    const reclassified = await this.reclassifyExistingArticles();
+    await this.invalidateListCache();
+
     return {
-      message: 'RSS refresh terminé',
-      ...result,
+      newArticles: result.newArticles,
+      reclassified,
     };
   }
 }

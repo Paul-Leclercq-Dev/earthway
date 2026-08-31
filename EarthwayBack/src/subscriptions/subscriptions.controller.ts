@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto, UpdateSubscriptionTierDto } from './dto/create-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -36,6 +37,7 @@ export class SubscriptionsController {
 
   // POST /subscriptions - create Stripe Checkout session
   @Post()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
   createSubscription(@Req() req: Request, @Body() dto: CreateSubscriptionDto) {
@@ -45,6 +47,7 @@ export class SubscriptionsController {
 
   // DELETE /subscriptions/:id - cancel subscription
   @Post('upgrade')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   upgradeSubscription(@Req() req: Request, @Body() dto: UpdateSubscriptionTierDto) {
@@ -53,6 +56,7 @@ export class SubscriptionsController {
   }
 
   @Post('downgrade')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   downgradeSubscription(@Req() req: Request, @Body() dto: UpdateSubscriptionTierDto) {
@@ -61,6 +65,7 @@ export class SubscriptionsController {
   }
 
   @Delete(':id')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   cancelSubscription(
